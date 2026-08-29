@@ -21,13 +21,19 @@ public class DefaultAgentLoop implements AgentLoop {
     private final ExecutionEngine executionEngine;
     private final ContextManager contextManager;
     private final Planner planner;
+    private final RetryStrategy retryStrategy;
     private final List<AgentEvent> events = new ArrayList<>();
 
     public DefaultAgentLoop(AgentRequest request, ExecutionEngine executionEngine, ContextManager contextManager, Planner planner) {
+        this(request, executionEngine, contextManager, planner, null);
+    }
+
+    public DefaultAgentLoop(AgentRequest request, ExecutionEngine executionEngine, ContextManager contextManager, Planner planner, RetryStrategy retryStrategy) {
         this.request = request;
         this.executionEngine = executionEngine;
         this.contextManager = contextManager;
         this.planner = planner;
+        this.retryStrategy = retryStrategy;
     }
 
     @Override
@@ -93,6 +99,21 @@ public class DefaultAgentLoop implements AgentLoop {
             currentState = stepResult.state();
 
             if (!stepResult.success()) {
+                if (retryStrategy != null) {
+                    FailureContext fc = new FailureContext(currentState.executionId(), stepResult.error(), currentState.iterations(), "MODEL_CALL");
+                    RetryDecision decision = retryStrategy.onFailure(fc);
+                    if (decision.shouldRetry()) {
+                        if (decision.delay() != null && !decision.delay().isZero()) {
+                            try {
+                                Thread.sleep(decision.delay().toMillis());
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                            }
+                        }
+                        continue;
+                    }
+                }
+
                 currentState = new AgentState(
                         currentState.executionId(),
                         currentState.history(),
