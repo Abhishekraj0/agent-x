@@ -18,7 +18,146 @@ The goal of **AgentX** is to provide Java developers with a lightweight, robust,
 
 ---
 
-## 🚀 Key Features
+## 📦 How to Use the Package in Your Project
+
+### 1. Configure Repository in `pom.xml`
+Because the package is hosted on GitHub Packages, configure the repository in your consuming Maven project:
+```xml
+<repositories>
+    <repository>
+        <id>github</id>
+        <url>https://maven.pkg.github.com/Abhishekraj0/agent-x</url>
+        <snapshots>
+            <enabled>true</enabled>
+        </snapshots>
+    </repository>
+</repositories>
+```
+
+### 2. Configure Authentication in `~/.m2/settings.xml`
+Generate a Personal Access Token (PAT) on GitHub with `read:packages` scope and configure your local Maven settings:
+```xml
+<settings>
+    <servers>
+        <server>
+            <id>github</id>
+            <username>YOUR_GITHUB_USERNAME</username>
+            <password>YOUR_GITHUB_PERSONAL_ACCESS_TOKEN</password>
+        </server>
+    </servers>
+</settings>
+```
+
+### 3. Add Maven Dependency
+Add the core dependency to your project:
+```xml
+<dependency>
+    <groupId>com.abhishekraj0</groupId>
+    <artifactId>agentx-core</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+```
+
+---
+
+## 🔑 Environment Variables & Configuration
+
+Below are the key environment variables you can pass to configure AgentX models and integrations:
+
+| Environment Variable | Description | Default / Example Value |
+|----------------------|-------------|-------------------------|
+| `OPENAI_API_KEY`     | Secret key for authenticating OpenAI calls. | `sk-proj-...` |
+| `OLLAMA_API_URL`     | Host URL of your locally running Ollama instance. | `http://localhost:11434` |
+| `ANTHROPIC_API_KEY`  | API key for Anthropic integration (used in custom clients). | `sk-ant-...` |
+| `GEMINI_API_KEY`     | API key for Google Gemini (used in custom clients). | `AIzaSy...` |
+
+---
+
+## 🤖 How to Integrate Different LLM Providers
+
+AgentX utilizes an interface-first model layer. If you use one of the built-in providers (OpenAI, Ollama) or want to integrate custom ones (Anthropic, Gemini, etc.), follow the code examples below:
+
+### 1. OpenAI
+Use the built-in `OpenAIChatModel` adapter:
+```java
+import com.abhishekraj0.core.model.openai.OpenAIChatModel;
+
+// Reads OPENAI_API_KEY from environment variables by default
+var model = new OpenAIChatModel("gpt-4o-mini", System.getenv("OPENAI_API_KEY"));
+```
+
+### 2. Ollama (Local Models)
+Use the built-in `OllamaChatModel` adapter:
+```java
+import com.abhishekraj0.core.model.ollama.OllamaChatModel;
+
+// Reads OLLAMA_API_URL or defaults to localhost
+var model = new OllamaChatModel("llama3", "http://localhost:11434");
+```
+
+### 3. Custom LLM / Any Model Provider
+To integrate any model provider (e.g. Anthropic, Gemini, or a custom internal API gateway), simply implement the `ChatModel` interface:
+```java
+import com.abhishekraj0.api.model.ChatModel;
+import com.abhishekraj0.api.model.ChatRequest;
+import com.abhishekraj0.api.model.ChatResponse;
+import com.abhishekraj0.api.model.ChatMessage;
+import com.abhishekraj0.api.model.ChatMessageRole;
+import com.abhishekraj0.api.model.ModelMetadata;
+import com.abhishekraj0.api.model.TokenUsage;
+
+import java.util.List;
+
+public class CustomChatModel implements ChatModel {
+    private final String modelName;
+    private final String apiKey;
+
+    public CustomChatModel(String modelName, String apiKey) {
+        this.modelName = modelName;
+        this.apiKey = apiKey;
+    }
+
+    @Override
+    public ChatResponse chat(ChatRequest request) {
+        // Implement your custom API call here (e.g. to Anthropic or Google Gemini REST API)
+        // String responseText = callMyLlmProvider(request.messages(), this.apiKey);
+
+        var responseMessage = new ChatMessage(
+            ChatMessageRole.ASSISTANT, 
+            "Hello, this is a response from my custom LLM!"
+        );
+        
+        return new ChatResponse(
+            responseMessage,
+            new TokenUsage(100, 50, 150),
+            List.of()
+        );
+    }
+
+    @Override
+    public ModelMetadata metadata() {
+        return new ModelMetadata(modelName, 0.0);
+    }
+}
+```
+
+### 4. How to Use Your Custom Model with the Agent
+Once implemented, pass the instance to `AgentX.builder()`:
+```java
+import com.abhishekraj0.api.agent.Agent;
+import com.abhishekraj0.core.AgentX;
+
+Agent agent = AgentX.builder()
+        .model(new CustomChatModel("my-custom-llm", "my-key"))
+        .build();
+
+var response = agent.run("Perform custom analysis");
+System.out.println(response.output());
+```
+
+---
+
+## 🛠 Features
 
 *   **Provider-Agnostic LLM Client**: Built-in support for **OpenAI** (cloud) and **Ollama** (local execution) using native Java HTTP client.
 *   **Deterministic Workflows**: Orchestrate multi-step execution flows using:
@@ -42,69 +181,6 @@ agentx/
 ├── agentx-mcp/        # Adapter and wrapper classes for MCP servers and tools
 ├── agentx-spring/     # Spring Boot autoconfiguration and properties mapping
 └── agentx-examples/   # Spring Boot CommandLineRunner demo application
-```
-
----
-
-## 🛠 How to Use
-
-### 1. Build and Install
-Clone the repository and compile using Maven:
-```bash
-git clone https://github.com/Abhishekraj0/agent-x.git
-cd agent-x
-mvn clean install
-```
-
-### 2. Basic Agent Usage (Core Java)
-Create an agent utilizing the fluent builder API:
-```java
-import com.abhishekraj0.api.agent.Agent;
-import com.abhishekraj0.api.agent.AgentRequest;
-import com.abhishekraj0.api.agent.AgentResponse;
-import com.abhishekraj0.core.AgentX;
-import com.abhishekraj0.core.model.openai.OpenAIChatModel;
-import com.abhishekraj0.core.tool.DefaultToolRegistry;
-
-// Initialize model and tool registry
-var chatModel = new OpenAIChatModel("gpt-4o-mini", "your-api-key");
-var toolRegistry = new DefaultToolRegistry();
-
-// Build the Agent
-Agent agent = AgentX.builder()
-        .model(chatModel)
-        .tools(toolRegistry)
-        .build();
-
-// Execute a request
-AgentResponse response = agent.run(new AgentRequest("How can I build workflows in Java?"));
-System.out.println("Agent Output: " + response.output());
-```
-
-### 3. Orchestrate a Deterministic Workflow
-Run sequential and parallel execution paths:
-```java
-import com.abhishekraj0.api.workflow.WorkflowContext;
-import com.abhishekraj0.core.workflow.*;
-import java.util.concurrent.ConcurrentHashMap;
-
-// Define steps
-WorkflowStep step1 = (context) -> {
-    context.variables().put("key1", "value1");
-    return context;
-};
-
-WorkflowStep step2 = (context) -> {
-    context.variables().put("key2", "value2");
-    return context;
-};
-
-// Create a Parallel step group
-var parallelGroup = new ParallelStep("parallel-tasks", step1, step2);
-
-// Execute via DefaultWorkflow
-var workflowContext = new WorkflowContext("tx-123", new ConcurrentHashMap<>());
-var result = new DefaultWorkflow().execute(parallelGroup, workflowContext);
 ```
 
 ---
