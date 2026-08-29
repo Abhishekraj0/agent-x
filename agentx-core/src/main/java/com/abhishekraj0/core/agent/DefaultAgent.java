@@ -32,6 +32,8 @@ public class DefaultAgent implements Agent {
     private final ApprovalProvider approvalProvider;
     private final RetryStrategy retryStrategy;
     private final ContextManager contextManager;
+    private final com.abhishekraj0.api.event.EventBus eventBus;
+    private final com.abhishekraj0.api.loop.GoalEvaluator goalEvaluator;
 
     private AgentState lastState;
 
@@ -45,13 +47,15 @@ public class DefaultAgent implements Agent {
         this.approvalProvider = builder.getApprovalProvider();
         this.retryStrategy = builder.getRetryStrategy();
         this.contextManager = builder.getContextManager() != null ? builder.getContextManager() : new SimpleContextManager();
+        this.eventBus = builder.getEventBus();
+        this.goalEvaluator = builder.getGoalEvaluator();
         reset();
     }
 
     @Override
     public AgentResponse run(AgentRequest request) {
-        ExecutionEngine engine = new DefaultExecutionEngine(model, tools, guardrails, permissionManager, approvalProvider);
-        AgentLoop loop = new DefaultAgentLoop(request, engine, contextManager, planner, retryStrategy);
+        ExecutionEngine engine = new DefaultExecutionEngine(model, tools, guardrails, permissionManager, approvalProvider, eventBus);
+        AgentLoop loop = new DefaultAgentLoop(request, engine, contextManager, planner, retryStrategy, goalEvaluator);
         AgentRuntime runtime = new DefaultAgentRuntime(loop);
 
         AgentResponse response = runtime.execute(request);

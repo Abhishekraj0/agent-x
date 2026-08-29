@@ -209,7 +209,11 @@ We welcome contributions to AgentX! Please read the contribution instructions be
     ```
 *   Maintain package prefixing using **`com.abhishekraj0`**.
 
-### 3. Submitting Pull Requests
+### 3. Branching & Contribution Policy
+*   **No Direct Commits**: Direct commits to `main`, `develop`, and `release` branches are strictly prohibited. All changes must be made in feature branches and merged via Pull Requests.
+*   **Branch Protection**: Deletion of the `main`, `develop`, and `release` branches is prohibited and protected by repository policies.
+
+### 4. Submitting Pull Requests
 *   Push your branch to your origin fork.
 *   Open a Pull Request (PR) from your feature branch targeting the `develop` branch of `Abhishekraj0/agent-x`.
 *   Provide a clear PR description detailing what was changed and why.

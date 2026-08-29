@@ -14,6 +14,7 @@ import java.util.List;
 
 /**
  * Default implementation of the primary agent reasoning and action loop.
+ * Integrates with LoopController state machine.
  */
 public class DefaultAgentLoop implements AgentLoop {
 
@@ -22,6 +23,7 @@ public class DefaultAgentLoop implements AgentLoop {
     private final ContextManager contextManager;
     private final Planner planner;
     private final RetryStrategy retryStrategy;
+    private final LoopController loopController;
     private final List<AgentEvent> events = new ArrayList<>();
 
     public DefaultAgentLoop(AgentRequest request, ExecutionEngine executionEngine, ContextManager contextManager, Planner planner) {
@@ -29,18 +31,44 @@ public class DefaultAgentLoop implements AgentLoop {
     }
 
     public DefaultAgentLoop(AgentRequest request, ExecutionEngine executionEngine, ContextManager contextManager, Planner planner, RetryStrategy retryStrategy) {
+        this(request, executionEngine, contextManager, planner, retryStrategy, null);
+    }
+
+    public DefaultAgentLoop(AgentRequest request, ExecutionEngine executionEngine, ContextManager contextManager, Planner planner, RetryStrategy retryStrategy, GoalEvaluator goalEvaluator) {
         this.request = request;
         this.executionEngine = executionEngine;
         this.contextManager = contextManager;
         this.planner = planner;
         this.retryStrategy = retryStrategy;
+
+        if (executionEngine instanceof DefaultExecutionEngine dee) {
+            this.loopController = new DefaultLoopController(
+                    new DefaultActionSelector(dee.model()),
+                    goalEvaluator != null ? goalEvaluator : new DefaultGoalEvaluator(),
+                    new DefaultObservationHandler(),
+                    new DefaultStateUpdater(),
+                    contextManager,
+                    dee.toolRegistry(),
+                    dee.guardrails(),
+                    dee.permissionManager(),
+                    dee.approvalProvider(),
+                    dee.eventBus()
+            );
+        } else {
+            this.loopController = null;
+        }
     }
 
     @Override
     public AgentResponse execute(AgentState state) {
+        if (loopController != null) {
+            LoopResult result = loopController.run(request, state);
+            return new AgentResponse(result.output(), result.finalState(), new ArrayList<>(events));
+        }
+
+        // Legacy fallback loop
         AgentState currentState = state;
 
-        // Add user message to history if empty
         if (currentState.history().isEmpty()) {
             List<ChatMessage> history = new ArrayList<>();
             history.add(ChatMessage.user(request.input()));
@@ -58,15 +86,12 @@ public class DefaultAgentLoop implements AgentLoop {
         AgentOptions options = request.options();
         int maxIterations = options != null ? options.maxIterations() : 10;
 
-        // Publish start event
         publishEvent(new AgentStartedEvent(request.executionId(), Instant.now()));
 
         while (currentState.iterations() < maxIterations && "RUNNING".equals(currentState.status())) {
 
-            // 1. Context Manager build context
             AgentContext context = contextManager.buildContext(request, currentState);
 
-            // 2. Planning (if no plan yet, create one)
             if (currentState.plan() == null && planner != null) {
                 Plan plan = planner.createPlan(request, context);
                 currentState = new AgentState(
@@ -81,7 +106,6 @@ public class DefaultAgentLoop implements AgentLoop {
                 publishEvent(new PlanCreatedEvent(request.executionId(), plan, Instant.now()));
             }
 
-            // 3. Increment iteration
             currentState = new AgentState(
                     currentState.executionId(),
                     currentState.history(),
@@ -92,7 +116,6 @@ public class DefaultAgentLoop implements AgentLoop {
                     currentState.status()
             );
 
-            // 4. Execution Step
             ExecutionRequest stepRequest = new ExecutionRequest(request, currentState);
             ExecutionResult stepResult = executionEngine.execute(stepRequest);
 
@@ -101,7 +124,7 @@ public class DefaultAgentLoop implements AgentLoop {
             if (!stepResult.success()) {
                 if (retryStrategy != null) {
                     FailureContext fc = new FailureContext(currentState.executionId(), stepResult.error(), currentState.iterations(), "MODEL_CALL");
-                    RetryDecision decision = retryStrategy.onFailure(fc);
+                    com.abhishekraj0.api.loop.RetryDecision decision = retryStrategy.onFailure(fc);
                     if (decision.shouldRetry()) {
                         if (decision.delay() != null && !decision.delay().isZero()) {
                             try {
@@ -127,7 +150,6 @@ public class DefaultAgentLoop implements AgentLoop {
                 return new AgentResponse(stepResult.output(), currentState, new ArrayList<>(events));
             }
 
-            // Check if goal completed
             if ("COMPLETED".equals(currentState.status())) {
                 publishEvent(new AgentCompletedEvent(request.executionId(), stepResult.output(), Instant.now()));
                 return new AgentResponse(stepResult.output(), currentState, new ArrayList<>(events));

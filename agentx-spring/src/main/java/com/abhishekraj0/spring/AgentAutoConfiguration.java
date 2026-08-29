@@ -40,11 +40,43 @@ public class AgentAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public Agent agent(ChatModel chatModel, ToolRegistry toolRegistry, ContextManager contextManager) {
-        return AgentX.builder()
+    public com.abhishekraj0.api.event.EventBus eventBus() {
+        return new com.abhishekraj0.core.event.SimpleEventBus();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AgentEventLogger agentEventLogger(com.abhishekraj0.api.event.EventBus eventBus) {
+        return new AgentEventLogger(eventBus);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public Agent agent(
+            ChatModel chatModel,
+            ToolRegistry toolRegistry,
+            ContextManager contextManager,
+            org.springframework.beans.factory.ObjectProvider<com.abhishekraj0.api.event.EventBus> eventBus,
+            org.springframework.beans.factory.ObjectProvider<com.abhishekraj0.api.security.Guardrail> guardrails,
+            org.springframework.beans.factory.ObjectProvider<com.abhishekraj0.api.security.PermissionManager> permissionManager,
+            org.springframework.beans.factory.ObjectProvider<com.abhishekraj0.api.security.ApprovalProvider> approvalProvider,
+            org.springframework.beans.factory.ObjectProvider<com.abhishekraj0.api.memory.MemoryStore> memoryStore,
+            org.springframework.beans.factory.ObjectProvider<com.abhishekraj0.api.planner.Planner> planner,
+            org.springframework.beans.factory.ObjectProvider<com.abhishekraj0.api.loop.RetryStrategy> retryStrategy
+    ) {
+        var builder = AgentX.builder()
                 .model(chatModel)
                 .tools(toolRegistry)
-                .contextManager(contextManager)
-                .build();
+                .contextManager(contextManager);
+
+        eventBus.ifAvailable(builder::eventBus);
+        guardrails.orderedStream().forEach(builder::guardrail);
+        permissionManager.ifAvailable(builder::permissionManager);
+        approvalProvider.ifAvailable(builder::approvalProvider);
+        memoryStore.ifAvailable(builder::memory);
+        planner.ifAvailable(builder::planner);
+        retryStrategy.ifAvailable(builder::retryStrategy);
+
+        return builder.build();
     }
 }
