@@ -35,6 +35,12 @@ public class AgentX {
         private RetryStrategy retryStrategy;
         private ContextManager contextManager;
         private EventBus eventBus;
+        private com.abhishekraj0.api.loop.GoalEvaluator goalEvaluator;
+
+        public Builder goalEvaluator(com.abhishekraj0.api.loop.GoalEvaluator goalEvaluator) {
+            this.goalEvaluator = goalEvaluator;
+            return this;
+        }
 
         public Builder model(ChatModel model) {
             this.model = model;
@@ -101,6 +107,7 @@ public class AgentX {
         public RetryStrategy getRetryStrategy() { return retryStrategy; }
         public ContextManager getContextManager() { return contextManager; }
         public EventBus getEventBus() { return eventBus; }
+        public com.abhishekraj0.api.loop.GoalEvaluator getGoalEvaluator() { return goalEvaluator; }
 
         public Agent build() {
             return new DefaultAgent(this);

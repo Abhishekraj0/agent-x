@@ -30,13 +30,13 @@ public class AgentStateMachine {
 
     private boolean isValidDefault(LoopState from, LoopState to) {
         if (from == to) return true;
-        // Finished states are terminal
-        if (from == LoopState.COMPLETED || from == LoopState.FAILED || from == LoopState.CANCELLED || from == LoopState.TIMEOUT) {
-            return false;
-        }
         // Universal transitions to terminal states
         if (to == LoopState.CANCELLED || to == LoopState.TIMEOUT || to == LoopState.FAILED) {
             return true;
+        }
+        // Finished states are terminal (unless transitioned to a terminal error/cancellation state checked above)
+        if (from == LoopState.COMPLETED || from == LoopState.FAILED || from == LoopState.CANCELLED || from == LoopState.TIMEOUT) {
+            return false;
         }
 
         switch (from) {
@@ -55,7 +55,7 @@ public class AgentStateMachine {
             case PLANNING:
                 return to == LoopState.DECIDING;
             case DECIDING:
-                return to == LoopState.VALIDATING;
+                return to == LoopState.VALIDATING || to == LoopState.REPLANNING || to == LoopState.WAITING_FOR_USER || to == LoopState.WAITING_FOR_APPROVAL;
             case VALIDATING:
                 return to == LoopState.AUTHORIZING;
             case AUTHORIZING:
@@ -71,7 +71,7 @@ public class AgentStateMachine {
             case EVALUATING_GOAL:
                 return to == LoopState.REPLANNING || to == LoopState.COMPLETED || to == LoopState.FAILED || to == LoopState.WAITING_FOR_USER || to == LoopState.BUILDING_CONTEXT;
             case REPLANNING:
-                return to == LoopState.PLANNING || to == LoopState.DECIDING;
+                return to == LoopState.PLANNING || to == LoopState.DECIDING || to == LoopState.EVALUATING_GOAL;
             case WAITING_FOR_USER:
                 return to == LoopState.UNDERSTANDING || to == LoopState.COMPLETED || to == LoopState.FAILED;
             default:

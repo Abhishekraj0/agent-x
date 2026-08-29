@@ -30,14 +30,6 @@ public class DefaultTerminationStrategy implements TerminationStrategy {
             return TerminationDecision.terminate("Execution was cancelled", LoopState.CANCELLED);
         }
 
-        if ("COMPLETED".equals(state.status())) {
-            return TerminationDecision.continueLoop(); // Handled by evaluator
-        }
-
-        if ("FAILED".equals(state.status()) || "TIMEOUT".equals(state.status()) || "CANCELLED".equals(state.status())) {
-            return TerminationDecision.continueLoop(); // Handled by evaluator
-        }
-
         if (state.iterations() >= options.maxIterations()) {
             return TerminationDecision.terminate("Max iterations (" + options.maxIterations() + ") reached", LoopState.FAILED);
         }
@@ -73,6 +65,14 @@ public class DefaultTerminationStrategy implements TerminationStrategy {
                     return TerminationDecision.terminate("Token budget exceeded: " + currentTokens + " >= " + tokenLimit, LoopState.FAILED);
                 }
             }
+        }
+
+        if ("COMPLETED".equals(state.status())) {
+            return TerminationDecision.continueLoop(); // Handled by evaluator
+        }
+
+        if ("FAILED".equals(state.status()) || "TIMEOUT".equals(state.status()) || "CANCELLED".equals(state.status())) {
+            return TerminationDecision.continueLoop(); // Handled by evaluator
         }
 
         return TerminationDecision.continueLoop();

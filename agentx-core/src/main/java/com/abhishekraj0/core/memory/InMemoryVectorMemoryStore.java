@@ -1,34 +1,46 @@
 package com.abhishekraj0.core.memory;
 
-import com.abhishekraj0.api.memory.Memory;
-import com.abhishekraj0.api.memory.MemoryId;
-import com.abhishekraj0.api.memory.MemoryQuery;
-import com.abhishekraj0.api.memory.MemoryStore;
+import com.abhishekraj0.api.memory.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * An in-memory mock vector database that stores memories and searches them
- * based on Jaccard token similarity (as a proxy for vector/semantic similarity).
+ * An in-memory vector database that stores memories and searches them
+ * based on true cosine similarity of their vector embeddings.
  */
 public class InMemoryVectorMemoryStore implements MemoryStore {
 
     private final Map<MemoryId, Memory> store = new ConcurrentHashMap<>();
+    private final Map<MemoryId, Embedding> embeddings = new ConcurrentHashMap<>();
+    private final EmbeddingModel embeddingModel;
+
+    public InMemoryVectorMemoryStore() {
+        this(new SimpleEmbeddingModel());
+    }
+
+    public InMemoryVectorMemoryStore(EmbeddingModel embeddingModel) {
+        this.embeddingModel = embeddingModel != null ? embeddingModel : new SimpleEmbeddingModel();
+    }
 
     @Override
     public void save(Memory memory) {
         store.put(memory.id(), memory);
+        if (memory.content() != null) {
+            embeddings.put(memory.id(), embeddingModel.embed(memory.content()));
+        }
     }
 
     @Override
     public void delete(MemoryId id) {
         store.remove(id);
+        embeddings.remove(id);
     }
 
     @Override
     public void clear() {
         store.clear();
+        embeddings.clear();
     }
 
     @Override
@@ -51,34 +63,41 @@ public class InMemoryVectorMemoryStore implements MemoryStore {
             return filtered.stream().limit(query.maxResults()).collect(Collectors.toList());
         }
 
-        Set<String> queryTokens = tokenize(query.queryText());
+        // Generate query embedding
+        Embedding queryEmbedding = embeddingModel.embed(query.queryText());
+
         return filtered.stream()
                 .sorted((m1, m2) -> {
-                    double sim1 = calculateSimilarity(queryTokens, tokenize(m1.content()));
-                    double sim2 = calculateSimilarity(queryTokens, tokenize(m2.content()));
-                    return Double.compare(sim2, sim1);
+                    double sim1 = calculateCosineSimilarity(queryEmbedding, embeddings.get(m1.id()));
+                    double sim2 = calculateCosineSimilarity(queryEmbedding, embeddings.get(m2.id()));
+                    return Double.compare(sim2, sim1); // Descending order of similarity
                 })
                 .limit(query.maxResults())
                 .collect(Collectors.toList());
     }
 
-    private Set<String> tokenize(String text) {
-        if (text == null) {
-            return Set.of();
-        }
-        return Arrays.stream(text.toLowerCase().split("\\W+"))
-                .filter(s -> !s.isBlank())
-                .collect(Collectors.toSet());
-    }
-
-    private double calculateSimilarity(Set<String> s1, Set<String> s2) {
-        if (s1.isEmpty() || s2.isEmpty()) {
+    private double calculateCosineSimilarity(Embedding e1, Embedding e2) {
+        if (e1 == null || e2 == null) {
             return 0.0;
         }
-        Set<String> intersection = new HashSet<>(s1);
-        intersection.retainAll(s2);
-        Set<String> union = new HashSet<>(s1);
-        union.addAll(s2);
-        return (double) intersection.size() / union.size();
+        List<Double> v1 = e1.vector();
+        List<Double> v2 = e2.vector();
+        if (v1 == null || v2 == null || v1.size() != v2.size() || v1.isEmpty()) {
+            return 0.0;
+        }
+        double dotProduct = 0.0;
+        double normA = 0.0;
+        double normB = 0.0;
+        for (int i = 0; i < v1.size(); i++) {
+            double a = v1.get(i);
+            double b = v2.get(i);
+            dotProduct += a * b;
+            normA += a * a;
+            normB += b * b;
+        }
+        if (normA == 0.0 || normB == 0.0) {
+            return 0.0;
+        }
+        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 }

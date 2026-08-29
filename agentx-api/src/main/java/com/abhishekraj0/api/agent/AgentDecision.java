@@ -9,7 +9,8 @@ public sealed interface AgentDecision
             AskUserDecision,
             DelegateDecision,
             ReplanDecision,
-            WaitForApprovalDecision {
+            WaitForApprovalDecision,
+            RetryDecision {
     
     String decisionId();
     String reason();

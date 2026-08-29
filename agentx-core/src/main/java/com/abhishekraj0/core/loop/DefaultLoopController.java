@@ -142,6 +142,18 @@ public class DefaultLoopController implements LoopController {
                 currentState = transition(currentState, LoopState.FAILED);
                 publishEvent(new AgentFailedEvent(request.executionId(), new RuntimeException("Goal evaluation returned FAILED"), Instant.now()));
                 return new LoopResult(currentState, "Failed", false, new RuntimeException("Goal failed"));
+            } else {
+                if ("COMPLETED".equals(currentState.status())) {
+                    currentState = new AgentState(
+                            currentState.executionId(),
+                            currentState.history(),
+                            currentState.plan(),
+                            currentState.variables(),
+                            currentState.iterations(),
+                            currentState.toolCalls(),
+                            "EVALUATING_GOAL"
+                    );
+                }
             }
 
             // BUILDING_CONTEXT
@@ -370,7 +382,26 @@ public class DefaultLoopController implements LoopController {
                 currentState = transition(currentState, LoopState.UPDATING_STATE);
             } else if (decision instanceof ReplanDecision rd) {
                 currentState = transition(currentState, LoopState.REPLANNING);
-                // Update plans in state if any
+                List<com.abhishekraj0.api.planner.PlanStep> newSteps = new ArrayList<>();
+                newSteps.add(new com.abhishekraj0.api.planner.PlanStep("replan-step-1", rd.replanDetails()));
+                com.abhishekraj0.api.planner.Plan newPlan = new com.abhishekraj0.api.planner.Plan(rd.decisionId(), currentState.plan() != null ? currentState.plan().goal() : "Replanned Goal", newSteps);
+                currentState = new AgentState(
+                        currentState.executionId(),
+                        currentState.history(),
+                        newPlan,
+                        currentState.variables(),
+                        currentState.iterations(),
+                        currentState.toolCalls(),
+                        currentState.status()
+                );
+            } else if (decision instanceof com.abhishekraj0.api.agent.RetryDecision rtd) {
+                if (rtd.delay() != null && !rtd.delay().isZero()) {
+                    try {
+                        Thread.sleep(rtd.delay().toMillis());
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
             }
             if (!"COMPLETED".equals(currentState.status()) && !"FAILED".equals(currentState.status()) && !"CANCELLED".equals(currentState.status()) && !"TIMEOUT".equals(currentState.status())) {
                 currentState = transition(currentState, LoopState.EVALUATING_GOAL);

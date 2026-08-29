@@ -31,6 +31,10 @@ public class DefaultAgentLoop implements AgentLoop {
     }
 
     public DefaultAgentLoop(AgentRequest request, ExecutionEngine executionEngine, ContextManager contextManager, Planner planner, RetryStrategy retryStrategy) {
+        this(request, executionEngine, contextManager, planner, retryStrategy, null);
+    }
+
+    public DefaultAgentLoop(AgentRequest request, ExecutionEngine executionEngine, ContextManager contextManager, Planner planner, RetryStrategy retryStrategy, GoalEvaluator goalEvaluator) {
         this.request = request;
         this.executionEngine = executionEngine;
         this.contextManager = contextManager;
@@ -40,7 +44,7 @@ public class DefaultAgentLoop implements AgentLoop {
         if (executionEngine instanceof DefaultExecutionEngine dee) {
             this.loopController = new DefaultLoopController(
                     new DefaultActionSelector(dee.model()),
-                    new DefaultGoalEvaluator(),
+                    goalEvaluator != null ? goalEvaluator : new DefaultGoalEvaluator(),
                     new DefaultObservationHandler(),
                     new DefaultStateUpdater(),
                     contextManager,
@@ -120,7 +124,7 @@ public class DefaultAgentLoop implements AgentLoop {
             if (!stepResult.success()) {
                 if (retryStrategy != null) {
                     FailureContext fc = new FailureContext(currentState.executionId(), stepResult.error(), currentState.iterations(), "MODEL_CALL");
-                    RetryDecision decision = retryStrategy.onFailure(fc);
+                    com.abhishekraj0.api.loop.RetryDecision decision = retryStrategy.onFailure(fc);
                     if (decision.shouldRetry()) {
                         if (decision.delay() != null && !decision.delay().isZero()) {
                             try {
