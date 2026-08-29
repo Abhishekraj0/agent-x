@@ -51,7 +51,7 @@ public class DefaultAgent implements Agent {
     @Override
     public AgentResponse run(AgentRequest request) {
         ExecutionEngine engine = new DefaultExecutionEngine(model, tools, guardrails, permissionManager, approvalProvider);
-        AgentLoop loop = new DefaultAgentLoop(request, engine, contextManager, planner);
+        AgentLoop loop = new DefaultAgentLoop(request, engine, contextManager, planner, retryStrategy);
         AgentRuntime runtime = new DefaultAgentRuntime(loop);
 
         AgentResponse response = runtime.execute(request);
