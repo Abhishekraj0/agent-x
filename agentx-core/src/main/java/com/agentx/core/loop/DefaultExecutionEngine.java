@@ -20,20 +20,30 @@ public class DefaultExecutionEngine implements ExecutionEngine {
     private final List<Guardrail> guardrails;
     private final PermissionManager permissionManager;
     private final ApprovalProvider approvalProvider;
+    private final com.agentx.api.event.EventBus eventBus;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public DefaultExecutionEngine(ChatModel model, ToolRegistry toolRegistry, List<Guardrail> guardrails, PermissionManager permissionManager, ApprovalProvider approvalProvider) {
+        this(model, toolRegistry, guardrails, permissionManager, approvalProvider, null);
+    }
+
+    public DefaultExecutionEngine(ChatModel model, ToolRegistry toolRegistry, List<Guardrail> guardrails, PermissionManager permissionManager, ApprovalProvider approvalProvider, com.agentx.api.event.EventBus eventBus) {
         this.model = model;
         this.toolRegistry = toolRegistry;
         this.guardrails = guardrails != null ? guardrails : List.of();
         this.permissionManager = permissionManager;
         this.approvalProvider = approvalProvider;
+        this.eventBus = eventBus;
     }
 
     @Override
     public ExecutionResult execute(ExecutionRequest request) {
         AgentState state = request.state();
         AgentRequest agentReq = request.request();
+
+        if (eventBus != null) {
+            eventBus.publish(new com.agentx.core.event.ExecutionStartedEvent(state.executionId(), agentReq.input()));
+        }
 
         List<ChatMessage> messages = new ArrayList<>(state.history());
         List<AgentTool> availableTools = new ArrayList<>(toolRegistry != null ? toolRegistry.all() : List.of());
@@ -152,6 +162,10 @@ public class DefaultExecutionEngine implements ExecutionEngine {
 
                 String toolOutput = toolResult.success() ? toolResult.output() : "Error: " + toolResult.error().message();
                 updatedHistory.add(ChatMessage.tool(toolCall.id(), toolOutput));
+
+                if (eventBus != null) {
+                    eventBus.publish(new com.agentx.core.event.ToolCalledEvent(state.executionId(), tool.id().name(), toolCall.argumentsJson(), toolOutput));
+                }
             }
 
             state = new AgentState(
@@ -167,6 +181,10 @@ public class DefaultExecutionEngine implements ExecutionEngine {
             return new ExecutionResult(state, "Executed tool calls.", true, null);
         } else {
             // Model returned a text response without calling tools -> complete the loop
+            if (eventBus != null) {
+                eventBus.publish(new com.agentx.core.event.ExecutionCompletedEvent(state.executionId(), responseMessage.content()));
+            }
+
             state = new AgentState(
                     state.executionId(),
                     updatedHistory,
