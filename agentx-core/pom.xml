@@ -5,18 +5,18 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.agentx</groupId>
+        <groupId>com.abhishekraj0</groupId>
         <artifactId>agentx</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>agentx-core</artifactId>
-    <name>AgentX - Core</name>
+    <name>Abhishekraj0 - Core</name>
     <description>Core runtime implementation, planning, memory, and security for AgentX</description>
 
     <dependencies>
         <dependency>
-            <groupId>com.agentx</groupId>
+            <groupId>com.abhishekraj0</groupId>
             <artifactId>agentx-api</artifactId>
         </dependency>
         

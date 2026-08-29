@@ -5,26 +5,26 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.agentx</groupId>
+        <groupId>com.abhishekraj0</groupId>
         <artifactId>agentx</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>agentx-examples</artifactId>
-    <name>AgentX - Examples</name>
+    <name>Abhishekraj0 - Examples</name>
     <description>Example applications demonstrating AgentX features</description>
 
     <dependencies>
         <dependency>
-            <groupId>com.agentx</groupId>
+            <groupId>com.abhishekraj0</groupId>
             <artifactId>agentx-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.agentx</groupId>
+            <groupId>com.abhishekraj0</groupId>
             <artifactId>agentx-mcp</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.agentx</groupId>
+            <groupId>com.abhishekraj0</groupId>
             <artifactId>agentx-spring</artifactId>
         </dependency>
         
