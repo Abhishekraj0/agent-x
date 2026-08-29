@@ -21,6 +21,8 @@ public class AgentAutoConfigurationTest {
             assertThat(context).hasSingleBean(ChatModel.class);
             assertThat(context).hasSingleBean(ToolRegistry.class);
             assertThat(context).hasSingleBean(ContextManager.class);
+            assertThat(context).hasSingleBean(com.abhishekraj0.api.event.EventBus.class);
+            assertThat(context).hasSingleBean(AgentEventLogger.class);
             assertThat(context).hasSingleBean(Agent.class);
 
             Agent agent = context.getBean(Agent.class);

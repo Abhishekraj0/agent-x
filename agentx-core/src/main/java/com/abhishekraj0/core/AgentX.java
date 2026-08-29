@@ -10,6 +10,7 @@ import com.abhishekraj0.api.security.ApprovalProvider;
 import com.abhishekraj0.api.security.Guardrail;
 import com.abhishekraj0.api.security.PermissionManager;
 import com.abhishekraj0.api.tool.ToolRegistry;
+import com.abhishekraj0.api.event.EventBus;
 import com.abhishekraj0.core.agent.DefaultAgent;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +34,7 @@ public class AgentX {
         private ApprovalProvider approvalProvider;
         private RetryStrategy retryStrategy;
         private ContextManager contextManager;
+        private EventBus eventBus;
 
         public Builder model(ChatModel model) {
             this.model = model;
@@ -84,6 +86,11 @@ public class AgentX {
             return this;
         }
 
+        public Builder eventBus(EventBus eventBus) {
+            this.eventBus = eventBus;
+            return this;
+        }
+
         public ChatModel getModel() { return model; }
         public Planner getPlanner() { return planner; }
         public MemoryStore getMemory() { return memory; }
@@ -93,6 +100,7 @@ public class AgentX {
         public ApprovalProvider getApprovalProvider() { return approvalProvider; }
         public RetryStrategy getRetryStrategy() { return retryStrategy; }
         public ContextManager getContextManager() { return contextManager; }
+        public EventBus getEventBus() { return eventBus; }
 
         public Agent build() {
             return new DefaultAgent(this);
