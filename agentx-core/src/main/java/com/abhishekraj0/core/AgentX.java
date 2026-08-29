@@ -10,6 +10,9 @@ import com.abhishekraj0.api.security.ApprovalProvider;
 import com.abhishekraj0.api.security.Guardrail;
 import com.abhishekraj0.api.security.PermissionManager;
 import com.abhishekraj0.api.tool.ToolRegistry;
+import com.abhishekraj0.api.agent.AgentExecutionStore;
+import com.abhishekraj0.api.agent.CheckpointManager;
+import com.abhishekraj0.api.tool.IdempotencyManager;
 import com.abhishekraj0.api.event.EventBus;
 import com.abhishekraj0.core.agent.DefaultAgent;
 import java.util.ArrayList;
@@ -36,6 +39,9 @@ public class AgentX {
         private ContextManager contextManager;
         private EventBus eventBus;
         private com.abhishekraj0.api.loop.GoalEvaluator goalEvaluator;
+        private AgentExecutionStore executionStore;
+        private CheckpointManager checkpointManager;
+        private IdempotencyManager idempotencyManager;
 
         public Builder goalEvaluator(com.abhishekraj0.api.loop.GoalEvaluator goalEvaluator) {
             this.goalEvaluator = goalEvaluator;
@@ -97,6 +103,21 @@ public class AgentX {
             return this;
         }
 
+        public Builder executionStore(AgentExecutionStore executionStore) {
+            this.executionStore = executionStore;
+            return this;
+        }
+
+        public Builder checkpointManager(CheckpointManager checkpointManager) {
+            this.checkpointManager = checkpointManager;
+            return this;
+        }
+
+        public Builder idempotencyManager(IdempotencyManager idempotencyManager) {
+            this.idempotencyManager = idempotencyManager;
+            return this;
+        }
+
         public ChatModel getModel() { return model; }
         public Planner getPlanner() { return planner; }
         public MemoryStore getMemory() { return memory; }
@@ -108,6 +129,9 @@ public class AgentX {
         public ContextManager getContextManager() { return contextManager; }
         public EventBus getEventBus() { return eventBus; }
         public com.abhishekraj0.api.loop.GoalEvaluator getGoalEvaluator() { return goalEvaluator; }
+        public AgentExecutionStore getExecutionStore() { return executionStore; }
+        public CheckpointManager getCheckpointManager() { return checkpointManager; }
+        public IdempotencyManager getIdempotencyManager() { return idempotencyManager; }
 
         public Agent build() {
             return new DefaultAgent(this);

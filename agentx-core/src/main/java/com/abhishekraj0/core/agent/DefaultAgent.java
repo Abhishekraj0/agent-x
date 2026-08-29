@@ -11,6 +11,7 @@ import com.abhishekraj0.api.planner.Planner;
 import com.abhishekraj0.api.security.ApprovalProvider;
 import com.abhishekraj0.api.security.Guardrail;
 import com.abhishekraj0.api.security.PermissionManager;
+import com.abhishekraj0.api.tool.IdempotencyManager;
 import com.abhishekraj0.api.tool.ToolRegistry;
 import com.abhishekraj0.core.AgentX;
 import com.abhishekraj0.core.context.SimpleContextManager;
@@ -19,9 +20,9 @@ import com.abhishekraj0.core.loop.DefaultExecutionEngine;
 import java.util.List;
 
 /**
- * Default implementation of Agent executing the runtime and looping sequences.
+ * Default implementation of Agent executing the runtime and looping sequences, supporting durable resume.
  */
-public class DefaultAgent implements Agent {
+public class DefaultAgent implements Agent, ResumableAgentRuntime {
 
     private final ChatModel model;
     private final Planner planner;
@@ -34,6 +35,11 @@ public class DefaultAgent implements Agent {
     private final ContextManager contextManager;
     private final com.abhishekraj0.api.event.EventBus eventBus;
     private final com.abhishekraj0.api.loop.GoalEvaluator goalEvaluator;
+
+    // Durable execution components
+    private final AgentExecutionStore executionStore;
+    private final CheckpointManager checkpointManager;
+    private final IdempotencyManager idempotencyManager;
 
     private AgentState lastState;
 
@@ -49,16 +55,35 @@ public class DefaultAgent implements Agent {
         this.contextManager = builder.getContextManager() != null ? builder.getContextManager() : new SimpleContextManager();
         this.eventBus = builder.getEventBus();
         this.goalEvaluator = builder.getGoalEvaluator();
+        this.executionStore = builder.getExecutionStore();
+        this.checkpointManager = builder.getCheckpointManager();
+        this.idempotencyManager = builder.getIdempotencyManager();
         reset();
     }
 
     @Override
     public AgentResponse run(AgentRequest request) {
         ExecutionEngine engine = new DefaultExecutionEngine(model, tools, guardrails, permissionManager, approvalProvider, eventBus);
-        AgentLoop loop = new DefaultAgentLoop(request, engine, contextManager, planner, retryStrategy, goalEvaluator);
-        AgentRuntime runtime = new DefaultAgentRuntime(loop);
+        AgentLoop loop = new DefaultAgentLoop(
+                request, engine, contextManager, planner, retryStrategy, goalEvaluator,
+                executionStore, checkpointManager, idempotencyManager
+        );
+        DefaultAgentRuntime runtime = new DefaultAgentRuntime(loop, executionStore, checkpointManager);
 
         AgentResponse response = runtime.execute(request);
+        this.lastState = response.state();
+        return response;
+    }
+
+    @Override
+    public AgentResponse resume(String executionId, ResumeInput input) {
+        ExecutionEngine engine = new DefaultExecutionEngine(model, tools, guardrails, permissionManager, approvalProvider, eventBus);
+        AgentLoop loop = new DefaultAgentLoop(
+                new AgentRequest(""), engine, contextManager, planner, retryStrategy, goalEvaluator,
+                executionStore, checkpointManager, idempotencyManager
+        );
+        DefaultAgentRuntime runtime = new DefaultAgentRuntime(loop, executionStore, checkpointManager);
+        AgentResponse response = runtime.resume(executionId, input);
         this.lastState = response.state();
         return response;
     }

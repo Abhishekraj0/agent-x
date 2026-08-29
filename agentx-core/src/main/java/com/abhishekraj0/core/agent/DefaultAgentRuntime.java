@@ -1,22 +1,37 @@
 package com.abhishekraj0.core.agent;
 
 import com.abhishekraj0.api.agent.*;
+import com.abhishekraj0.api.failure.AgentFailure;
+import com.abhishekraj0.api.failure.FailureType;
 import com.abhishekraj0.api.loop.AgentLoop;
+import com.abhishekraj0.api.model.ChatMessage;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Default implementation of AgentRuntime managing active agent executions.
+ * Resumable implementation of AgentRuntime managing active agent executions with durable pause/resume.
  */
-public class DefaultAgentRuntime implements AgentRuntime {
+public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime {
 
     private final AgentLoop agentLoop;
+    private final AgentExecutionStore executionStore;
+    private final CheckpointManager checkpointManager;
     private final Map<String, AgentExecution> executions = new ConcurrentHashMap<>();
     private final Map<String, Boolean> cancellations = new ConcurrentHashMap<>();
 
     public DefaultAgentRuntime(AgentLoop agentLoop) {
+        this(agentLoop, null, null);
+    }
+
+    public DefaultAgentRuntime(AgentLoop agentLoop, AgentExecutionStore executionStore, CheckpointManager checkpointManager) {
         this.agentLoop = agentLoop;
+        this.executionStore = executionStore;
+        this.checkpointManager = checkpointManager;
     }
 
     @Override
@@ -46,6 +61,81 @@ public class DefaultAgentRuntime implements AgentRuntime {
             throw e;
         } finally {
             cancellations.remove(execId);
+        }
+    }
+
+    @Override
+    public AgentResponse resume(String executionId, ResumeInput input) {
+        if (executionStore == null) {
+            throw new AgentFailure(FailureType.INVALID_STATE, "NO_STORE", "No execution store configured for durable resume", false, executionId, null);
+        }
+        Optional<AgentExecutionSnapshot> snapshotOpt = executionStore.find(executionId);
+        if (snapshotOpt.isEmpty()) {
+            throw new AgentFailure(FailureType.INVALID_STATE, "SNAPSHOT_NOT_FOUND", "Snapshot not found for execution ID: " + executionId, false, executionId, null);
+        }
+        AgentExecutionSnapshot snapshot = snapshotOpt.get();
+        AgentState state = snapshot.state();
+
+        if (!"WAITING_APPROVAL".equals(state.status()) && !"WAITING_FOR_USER".equals(state.status())) {
+            throw new AgentFailure(FailureType.INVALID_STATE, "INVALID_STATUS", "Cannot resume execution in status: " + state.status(), false, executionId, null);
+        }
+
+        Map<String, Object> updatedVariables = new HashMap<>(state.variables() != null ? state.variables() : Map.of());
+        List<ChatMessage> updatedHistory = new ArrayList<>(state.history());
+
+        if ("WAITING_APPROVAL".equals(state.status())) {
+            if (input.approvalResult() == null) {
+                throw new AgentFailure(FailureType.INVALID_STATE, "MISSING_APPROVAL", "ApprovalResult is required to resume from WAITING_APPROVAL", false, executionId, null);
+            }
+            String toolCallId = (String) state.variables().get("pending_tool_call_id");
+            if (toolCallId == null) {
+                throw new AgentFailure(FailureType.INVALID_STATE, "NO_PENDING_TOOL", "No pending tool call ID found in state variables", false, executionId, null);
+            }
+            updatedVariables.put("approval_result_" + toolCallId, input.approvalResult());
+        } else if ("WAITING_FOR_USER".equals(state.status())) {
+            if (input.userInput() == null) {
+                throw new AgentFailure(FailureType.INVALID_STATE, "MISSING_USER_INPUT", "UserInput is required to resume from WAITING_FOR_USER", false, executionId, null);
+            }
+            updatedHistory.add(ChatMessage.user(input.userInput()));
+        }
+
+        if (input.additionalVariables() != null) {
+            updatedVariables.putAll(input.additionalVariables());
+        }
+
+        AgentState restoredState = new AgentState(
+                state.executionId(),
+                updatedHistory,
+                state.plan(),
+                updatedVariables,
+                state.iterations(),
+                state.toolCalls(),
+                "INITIALIZED"
+        );
+
+        cancellations.put(executionId, false);
+        AgentExecution execution = new AgentExecution(executionId, new AgentRequest(snapshot.goal()), restoredState, snapshot.timestamp(), null);
+        executions.put(executionId, execution);
+
+        try {
+            AgentResponse response = agentLoop.execute(restoredState);
+            AgentExecution finalExecution = new AgentExecution(
+                    executionId, new AgentRequest(snapshot.goal()), response.state(), execution.startTime(), Instant.now()
+            );
+            executions.put(executionId, finalExecution);
+            return response;
+        } catch (Exception e) {
+            AgentState errorState = new AgentState(
+                    executionId, restoredState.history(), restoredState.plan(), restoredState.variables(),
+                    restoredState.iterations(), restoredState.toolCalls(), "FAILED"
+            );
+            AgentExecution failedExecution = new AgentExecution(
+                    executionId, new AgentRequest(snapshot.goal()), errorState, execution.startTime(), Instant.now()
+            );
+            executions.put(executionId, failedExecution);
+            throw e;
+        } finally {
+            cancellations.remove(executionId);
         }
     }
 
