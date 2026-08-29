@@ -7,6 +7,7 @@ import com.abhishekraj0.api.loop.*;
 import com.abhishekraj0.api.model.ChatMessage;
 import com.abhishekraj0.api.planner.Plan;
 import com.abhishekraj0.api.planner.Planner;
+import com.abhishekraj0.api.tool.IdempotencyManager;
 import com.abhishekraj0.core.event.*;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -35,6 +36,10 @@ public class DefaultAgentLoop implements AgentLoop {
     }
 
     public DefaultAgentLoop(AgentRequest request, ExecutionEngine executionEngine, ContextManager contextManager, Planner planner, RetryStrategy retryStrategy, GoalEvaluator goalEvaluator) {
+        this(request, executionEngine, contextManager, planner, retryStrategy, goalEvaluator, null, null, null);
+    }
+
+    public DefaultAgentLoop(AgentRequest request, ExecutionEngine executionEngine, ContextManager contextManager, Planner planner, RetryStrategy retryStrategy, GoalEvaluator goalEvaluator, AgentExecutionStore executionStore, CheckpointManager checkpointManager, IdempotencyManager idempotencyManager) {
         this.request = request;
         this.executionEngine = executionEngine;
         this.contextManager = contextManager;
@@ -52,7 +57,10 @@ public class DefaultAgentLoop implements AgentLoop {
                     dee.guardrails(),
                     dee.permissionManager(),
                     dee.approvalProvider(),
-                    dee.eventBus()
+                    dee.eventBus(),
+                    executionStore,
+                    checkpointManager,
+                    idempotencyManager
             );
         } else {
             this.loopController = null;
