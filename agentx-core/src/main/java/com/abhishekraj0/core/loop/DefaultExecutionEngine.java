@@ -36,6 +36,30 @@ public class DefaultExecutionEngine implements ExecutionEngine {
         this.eventBus = eventBus;
     }
 
+    public ChatModel model() {
+        return model;
+    }
+
+    public ToolRegistry toolRegistry() {
+        return toolRegistry;
+    }
+
+    public List<Guardrail> guardrails() {
+        return guardrails;
+    }
+
+    public PermissionManager permissionManager() {
+        return permissionManager;
+    }
+
+    public ApprovalProvider approvalProvider() {
+        return approvalProvider;
+    }
+
+    public com.abhishekraj0.api.event.EventBus eventBus() {
+        return eventBus;
+    }
+
     @Override
     public ExecutionResult execute(ExecutionRequest request) {
         AgentState state = request.state();

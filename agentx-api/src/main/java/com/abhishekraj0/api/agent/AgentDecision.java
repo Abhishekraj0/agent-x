@@ -1,10 +1,16 @@
 package com.abhishekraj0.api.agent;
 
 /**
- * Represents a decision made by an agent reasoning loop, containing reasoning details and the chosen action.
+ * Strongly typed decision made by the agent reasoning loop.
  */
-public record AgentDecision(
-        String decisionId,
-        String reason,
-        AgentAction action
-) {}
+public sealed interface AgentDecision
+    permits ToolCallDecision,
+            FinalResponseDecision,
+            AskUserDecision,
+            DelegateDecision,
+            ReplanDecision,
+            WaitForApprovalDecision {
+    
+    String decisionId();
+    String reason();
+}
