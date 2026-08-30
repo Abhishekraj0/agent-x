@@ -34,6 +34,10 @@ public class AgentEventLogger implements InitializingBean {
                 log.error("[AgentX] Execution ID: {} - Agent execution failed. Error: {}", e.executionId(), e.error() != null ? e.error().getMessage() : "Unknown error")
         );
 
+        eventBus.subscribe(AgentCancelledEvent.class, e ->
+                log.warn("[AgentX] Execution ID: {} - Agent execution cancelled. Reason: {}", e.executionId(), e.reason())
+        );
+
         eventBus.subscribe(StateTransitionEvent.class, e ->
                 log.debug("[AgentX] Execution ID: {} - Transitioned from {} to {}", e.executionId(), e.fromState(), e.toState())
         );
