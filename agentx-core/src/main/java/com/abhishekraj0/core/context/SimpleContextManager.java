@@ -14,11 +14,13 @@ public class SimpleContextManager implements ContextManager {
 
     @Override
     public AgentContext buildContext(AgentRequest request, AgentState state) {
+        com.abhishekraj0.api.agent.CancellationToken token = com.abhishekraj0.core.agent.DefaultCancellationToken.get(state.executionId());
         return new AgentContext(
                 new ArrayList<>(state.history()),
                 state.variables(),
                 "You are an autonomous AI agent.",
-                Map.of()
+                Map.of(),
+                token
         );
     }
 

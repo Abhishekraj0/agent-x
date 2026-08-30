@@ -1,21 +1,13 @@
 package com.abhishekraj0.api.agent;
 
-import java.io.Serializable;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 /**
  * Token propagated through layers to signal cancellation requests.
  */
-public class CancellationToken implements Serializable {
-    private static final long serialVersionUID = 1L;
+public interface CancellationToken {
 
-    private final AtomicBoolean cancelled = new AtomicBoolean(false);
+    boolean isCancelled();
 
-    public void cancel() {
-        cancelled.set(true);
-    }
+    void throwIfCancelled() throws RuntimeException;
 
-    public boolean isCancelled() {
-        return cancelled.get();
-    }
+    void onCancel(Runnable callback);
 }

@@ -24,11 +24,13 @@ public class SlidingWindowContextManager implements ContextManager {
 
     @Override
     public AgentContext buildContext(AgentRequest request, AgentState state) {
+        com.abhishekraj0.api.agent.CancellationToken token = com.abhishekraj0.core.agent.DefaultCancellationToken.get(state.executionId());
         AgentContext rawContext = new AgentContext(
                 new ArrayList<>(state.history()),
                 state.variables(),
                 "You are an autonomous AI agent.",
-                Map.of()
+                Map.of(),
+                token
         );
         return compress(rawContext);
     }
@@ -62,7 +64,8 @@ public class SlidingWindowContextManager implements ContextManager {
                 compressedHistory,
                 context.variables(),
                 context.systemInstruction(),
-                context.metadata()
+                context.metadata(),
+                context.cancellationToken()
         );
     }
 }
