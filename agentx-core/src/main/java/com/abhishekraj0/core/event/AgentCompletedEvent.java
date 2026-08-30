@@ -9,6 +9,10 @@ import java.util.UUID;
  */
 public record AgentCompletedEvent(String id, String executionId, String output, Instant timestamp) implements AgentEvent {
 
+    public AgentCompletedEvent {
+        output = com.abhishekraj0.api.security.SecretRedactor.getInstance().redact(output);
+    }
+
     public AgentCompletedEvent(String executionId, String output, Instant timestamp) {
         this(UUID.randomUUID().toString(), executionId, output, timestamp);
     }

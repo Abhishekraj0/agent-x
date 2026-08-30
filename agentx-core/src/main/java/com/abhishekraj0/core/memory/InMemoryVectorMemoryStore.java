@@ -25,9 +25,24 @@ public class InMemoryVectorMemoryStore implements MemoryStore {
 
     @Override
     public void save(Memory memory) {
-        store.put(memory.id(), memory);
-        if (memory.content() != null) {
-            embeddings.put(memory.id(), embeddingModel.embed(memory.content()));
+        Memory memoryToSave = memory;
+        Map<String, Object> meta = memory.metadata() != null ? memory.metadata().additionalMetadata() : null;
+        if (meta == null || !meta.containsKey("scope")) {
+            String execId = MemoryContextHolder.getExecutionId();
+            if (execId != null) {
+                Map<String, Object> additional = new HashMap<>(meta != null ? meta : Map.of());
+                additional.put("scope", MemoryScope.EXECUTION.name());
+                additional.put("scopeId", execId);
+                MemoryMetadata newMeta = new MemoryMetadata(
+                    memory.metadata() != null ? memory.metadata().createdAt() : java.time.Instant.now(),
+                    Collections.unmodifiableMap(additional)
+                );
+                memoryToSave = new Memory(memory.id(), memory.content(), memory.type(), newMeta);
+            }
+        }
+        store.put(memoryToSave.id(), memoryToSave);
+        if (memoryToSave.content() != null) {
+            embeddings.put(memoryToSave.id(), embeddingModel.embed(memoryToSave.content()));
         }
     }
 
@@ -45,26 +60,41 @@ public class InMemoryVectorMemoryStore implements MemoryStore {
 
     @Override
     public List<Memory> search(MemoryQuery query) {
+        final MemoryQuery queryToUse;
+        if (query.filter() == null || !query.filter().containsKey("scope")) {
+            String execId = MemoryContextHolder.getExecutionId();
+            if (execId != null) {
+                Map<String, Object> newFilter = new HashMap<>(query.filter() != null ? query.filter() : Map.of());
+                newFilter.put("scope", MemoryScope.EXECUTION.name());
+                newFilter.put("scopeId", execId);
+                queryToUse = new MemoryQuery(query.queryText(), query.type(), query.maxResults(), Collections.unmodifiableMap(newFilter));
+            } else {
+                queryToUse = query;
+            }
+        } else {
+            queryToUse = query;
+        }
+
         List<Memory> filtered = store.values().stream()
-                .filter(m -> query.type() == null || query.type().equalsIgnoreCase(m.type()))
+                .filter(m -> queryToUse.type() == null || queryToUse.type().equalsIgnoreCase(m.type()))
                 .filter(m -> {
-                    if (query.filter() == null || query.filter().isEmpty()) {
+                    if (queryToUse.filter() == null || queryToUse.filter().isEmpty()) {
                         return true;
                     }
                     if (m.metadata() == null || m.metadata().additionalMetadata() == null) {
                         return false;
                     }
-                    return query.filter().entrySet().stream()
+                    return queryToUse.filter().entrySet().stream()
                             .allMatch(e -> Objects.equals(e.getValue(), m.metadata().additionalMetadata().get(e.getKey())));
                 })
                 .collect(Collectors.toList());
 
-        if (query.queryText() == null || query.queryText().isBlank()) {
-            return filtered.stream().limit(query.maxResults()).collect(Collectors.toList());
+        if (queryToUse.queryText() == null || queryToUse.queryText().isBlank()) {
+            return filtered.stream().limit(queryToUse.maxResults()).collect(Collectors.toList());
         }
 
         // Generate query embedding
-        Embedding queryEmbedding = embeddingModel.embed(query.queryText());
+        Embedding queryEmbedding = embeddingModel.embed(queryToUse.queryText());
 
         return filtered.stream()
                 .sorted((m1, m2) -> {
@@ -72,7 +102,7 @@ public class InMemoryVectorMemoryStore implements MemoryStore {
                     double sim2 = calculateCosineSimilarity(queryEmbedding, embeddings.get(m2.id()));
                     return Double.compare(sim2, sim1); // Descending order of similarity
                 })
-                .limit(query.maxResults())
+                .limit(queryToUse.maxResults())
                 .collect(Collectors.toList());
     }
 

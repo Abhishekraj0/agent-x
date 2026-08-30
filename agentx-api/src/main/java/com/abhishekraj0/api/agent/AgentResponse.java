@@ -10,4 +10,8 @@ public record AgentResponse(
         String output,
         AgentState state,
         List<AgentEvent> events
-) {}
+) {
+    public AgentResponse {
+        output = com.abhishekraj0.api.security.SecretRedactor.getInstance().redact(output);
+    }
+}
