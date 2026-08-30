@@ -9,6 +9,7 @@ import com.abhishekraj0.api.loop.*;
 import com.abhishekraj0.api.model.*;
 import com.abhishekraj0.api.tool.*;
 import com.abhishekraj0.core.AgentX;
+import com.abhishekraj0.core.event.AgentCancelledEvent;
 import com.abhishekraj0.core.event.AgentFailedEvent;
 import com.abhishekraj0.core.event.SimpleEventBus;
 import com.abhishekraj0.core.model.mock.MockChatModel;
@@ -31,7 +32,7 @@ public class CancellationPropagationTest {
         System.out.println("Starting test with execId: " + execId);
         SimpleEventBus eventBus = new SimpleEventBus();
         List<AgentEvent> receivedEvents = new ArrayList<>();
-        eventBus.subscribe(AgentFailedEvent.class, receivedEvents::add);
+        eventBus.subscribe(AgentCancelledEvent.class, receivedEvents::add);
 
         DefaultToolRegistry toolRegistry = new DefaultToolRegistry();
         AtomicBoolean toolStoppedCooperatively = new AtomicBoolean(false);
@@ -114,15 +115,15 @@ public class CancellationPropagationTest {
         assertNotNull(exec);
         assertEquals("CANCELLED", exec.state().status()); // AgentState status becomes CANCELLED
 
-        // Verify that AgentFailedEvent was emitted (indicating cancellation / failure)
+        // Verify that AgentCancelledEvent was emitted (indicating cancellation / failure)
         assertFalse(receivedEvents.isEmpty(), "Events should have been received");
         boolean hasCancellationEvent = receivedEvents.stream().anyMatch(event -> {
-            if (event instanceof AgentFailedEvent afe) {
-                return afe.error() != null && afe.error().getMessage() != null && afe.error().getMessage().contains("cancelled");
+            if (event instanceof AgentCancelledEvent ace) {
+                return ace.reason() != null && ace.reason().toLowerCase().contains("cancelled");
             }
             return false;
         });
-        assertTrue(hasCancellationEvent, "Should have received an AgentFailedEvent with cancellation details");
+        assertTrue(hasCancellationEvent, "Should have received an AgentCancelledEvent with cancellation details");
 
         executor.shutdownNow();
     }

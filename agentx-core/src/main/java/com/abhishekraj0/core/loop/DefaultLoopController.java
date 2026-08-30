@@ -219,7 +219,7 @@ public class DefaultLoopController implements LoopController {
             // Check cancellation before reasoning
             if (cancellationCheck.get()) {
                 currentState = transition(currentState, LoopState.CANCELLED);
-                publishEvent(new AgentFailedEvent(request.executionId(), new RuntimeException("Execution was cancelled"), Instant.now()));
+                publishEvent(new AgentCancelledEvent(request.executionId(), "Execution was cancelled", Instant.now()));
                 return new LoopResult(currentState, "Cancelled", false, new AgentFailure(FailureType.CANCELLATION, "CANCELLED", "Execution cancelled", false, currentState.executionId(), null));
             }
 
@@ -362,6 +362,7 @@ public class DefaultLoopController implements LoopController {
                     // Check cancellation before tool call
                     if (cancellationCheck.get()) {
                         currentState = transition(currentState, LoopState.CANCELLED);
+                        publishEvent(new AgentCancelledEvent(request.executionId(), "Cancelled during tool execution", Instant.now()));
                         return new LoopResult(currentState, "Cancelled during tool execution", false, new AgentFailure(FailureType.CANCELLATION, "CANCELLED", "Cancelled during tool execution", false, currentState.executionId(), null));
                     }
 
@@ -587,7 +588,7 @@ public class DefaultLoopController implements LoopController {
 
                     if (cancellationCheck.get()) {
                         currentState = transition(currentState, LoopState.CANCELLED);
-                        publishEvent(new AgentFailedEvent(request.executionId(), new RuntimeException("Execution was cancelled"), Instant.now()));
+                        publishEvent(new AgentCancelledEvent(request.executionId(), "Cancelled during tool execution", Instant.now()));
                         return new LoopResult(currentState, "Cancelled during tool execution", false, new AgentFailure(FailureType.CANCELLATION, "CANCELLED", "Cancelled during tool execution", false, currentState.executionId(), null));
                     }
 
