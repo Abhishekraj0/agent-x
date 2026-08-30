@@ -5,6 +5,7 @@ import com.abhishekraj0.api.failure.AgentFailure;
 import com.abhishekraj0.api.failure.FailureType;
 import com.abhishekraj0.api.loop.AgentLoop;
 import com.abhishekraj0.api.model.ChatMessage;
+import com.abhishekraj0.api.memory.MemoryContextHolder;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -49,6 +50,7 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
         executions.put(execId, execution);
 
         try {
+            MemoryContextHolder.setExecutionId(execId);
             AgentResponse response = agentLoop.execute(initialState);
             AgentExecution finalExecution = new AgentExecution(
                     execId, request, response.state(), execution.startTime(), Instant.now()
@@ -56,9 +58,11 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
             executions.put(execId, finalExecution);
             return response;
         } catch (Exception e) {
+            boolean cancelled = isCancelled(execId) || (e instanceof AgentFailure af && af.getType() == FailureType.CANCELLATION);
+            String status = cancelled ? "CANCELLED" : "FAILED";
             AgentState errorState = new AgentState(
                     execId, initialState.history(), initialState.plan(), initialState.variables(),
-                    initialState.iterations(), initialState.toolCalls(), "FAILED"
+                    initialState.iterations(), initialState.toolCalls(), status
             );
             AgentExecution failedExecution = new AgentExecution(
                     execId, request, errorState, execution.startTime(), Instant.now()
@@ -66,6 +70,7 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
             executions.put(execId, failedExecution);
             throw e;
         } finally {
+            MemoryContextHolder.clearExecutionId();
             cancellations.remove(execId);
             DefaultCancellationToken.deregister(execId);
         }
@@ -131,6 +136,7 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
         executions.put(executionId, execution);
 
         try {
+            MemoryContextHolder.setExecutionId(executionId);
             AgentResponse response = agentLoop.execute(restoredState);
             AgentExecution finalExecution = new AgentExecution(
                     executionId, new AgentRequest(snapshot.goal()), response.state(), execution.startTime(), Instant.now()
@@ -138,9 +144,11 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
             executions.put(executionId, finalExecution);
             return response;
         } catch (Exception e) {
+            boolean cancelled = isCancelled(executionId) || (e instanceof AgentFailure af && af.getType() == FailureType.CANCELLATION);
+            String status = cancelled ? "CANCELLED" : "FAILED";
             AgentState errorState = new AgentState(
                     executionId, restoredState.history(), restoredState.plan(), restoredState.variables(),
-                    restoredState.iterations(), restoredState.toolCalls(), "FAILED"
+                    restoredState.iterations(), restoredState.toolCalls(), status
             );
             AgentExecution failedExecution = new AgentExecution(
                     executionId, new AgentRequest(snapshot.goal()), errorState, execution.startTime(), Instant.now()
@@ -148,6 +156,7 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
             executions.put(executionId, failedExecution);
             throw e;
         } finally {
+            MemoryContextHolder.clearExecutionId();
             cancellations.remove(executionId);
             DefaultCancellationToken.deregister(executionId);
         }

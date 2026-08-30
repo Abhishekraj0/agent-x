@@ -13,6 +13,9 @@ public record ChatMessage(
         List<ToolCall> toolCalls,
         Map<String, Object> metadata
 ) {
+    public ChatMessage {
+        content = com.abhishekraj0.api.security.SecretRedactor.getInstance().redact(content);
+    }
     public static ChatMessage system(String content) {
         return new ChatMessage(ChatMessageRole.SYSTEM, content, null, null, Map.of());
     }
