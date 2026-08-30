@@ -18,9 +18,21 @@ public class DefaultActionSelector implements ActionSelector {
 
     private final ChatModel model;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private volatile TokenUsage lastUsage;
 
     public DefaultActionSelector(ChatModel model) {
         this.model = model;
+    }
+
+    @Override
+    public TokenUsage lastTokenUsage() {
+        TokenUsage u = lastUsage;
+        return u != null ? u : TokenUsage.zero();
+    }
+
+    @Override
+    public ModelMetadata metadata() {
+        return model != null ? model.metadata() : new ModelMetadata("unknown", "unknown", 8192, false, false, new ModelCapabilities(false, false, false, false, false));
     }
 
     @Override
@@ -33,6 +45,7 @@ public class DefaultActionSelector implements ActionSelector {
         );
 
         ChatResponse response = model.chat(chatRequest);
+        this.lastUsage = response.usage();
         ChatMessage msg = response.message();
         String decisionId = UUID.randomUUID().toString();
 

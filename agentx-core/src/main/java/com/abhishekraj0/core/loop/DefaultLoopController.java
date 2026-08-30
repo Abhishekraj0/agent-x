@@ -144,6 +144,9 @@ public class DefaultLoopController implements LoopController {
         Map<String, Object> variables = new HashMap<>(state.variables() != null ? state.variables() : Map.of());
         variables.putIfAbsent("accumulatedTokens", 0);
         variables.putIfAbsent("accumulatedCost", 0.0);
+        variables.putIfAbsent("estimatedTokens", 0);
+        variables.putIfAbsent("estimatedCost", 0.0);
+        variables.putIfAbsent("isEstimatedUsage", false);
         if (request.options() != null && request.options().additionalOptions() != null) {
             Object costBudget = request.options().additionalOptions().get("costBudget");
             if (costBudget != null) {
@@ -282,12 +285,40 @@ public class DefaultLoopController implements LoopController {
             }
 
             // Track Token Usage and Cost
-            int currentTokens = (int) variables.getOrDefault("accumulatedTokens", 0);
-            double currentCost = (double) variables.getOrDefault("accumulatedCost", 0.0);
-            currentTokens += 500;
-            currentCost += 0.005;
+            TokenUsage responseUsage = actionSelector.lastTokenUsage();
+            boolean isEst = false;
+            TokenUsage actualUsage = null;
+            TokenUsage estimatedUsage = null;
+
+            if (responseUsage != null && responseUsage.totalTokens() > 0) {
+                actualUsage = responseUsage;
+            } else {
+                estimatedUsage = new TokenUsage(350, 150, 500);
+                isEst = true;
+            }
+
+            int currentTokens = ((Number) variables.getOrDefault("accumulatedTokens", 0)).intValue();
+            double currentCost = ((Number) variables.getOrDefault("accumulatedCost", 0.0)).doubleValue();
+            int currentEstTokens = ((Number) variables.getOrDefault("estimatedTokens", 0)).intValue();
+            double currentEstCost = ((Number) variables.getOrDefault("estimatedCost", 0.0)).doubleValue();
+
+            ModelMetadata modelMeta = actionSelector.metadata();
+
+            if (!isEst) {
+                currentTokens += actualUsage.totalTokens();
+                Cost cost = costCalculator.calculate(modelMeta, actualUsage);
+                currentCost += cost.totalCost();
+            } else {
+                currentEstTokens += estimatedUsage.totalTokens();
+                Cost cost = costCalculator.calculate(modelMeta, estimatedUsage);
+                currentEstCost += cost.totalCost();
+            }
+
             variables.put("accumulatedTokens", currentTokens);
             variables.put("accumulatedCost", currentCost);
+            variables.put("estimatedTokens", currentEstTokens);
+            variables.put("estimatedCost", currentEstCost);
+            variables.put("isEstimatedUsage", isEst);
 
             // Update iterations
             currentState = new AgentState(
