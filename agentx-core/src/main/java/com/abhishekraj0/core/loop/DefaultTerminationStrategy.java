@@ -46,23 +46,51 @@ public class DefaultTerminationStrategy implements TerminationStrategy {
         }
 
         if (state.variables() != null) {
+            String policy = "ESTIMATED_OR_ACTUAL";
+            if (options.additionalOptions() != null) {
+                Object p = options.additionalOptions().get("budgetEnforcementPolicy");
+                if (p instanceof String s) {
+                    policy = s;
+                }
+            }
+
             Object costLimitObj = state.variables().get("costBudget");
-            Object currentCostObj = state.variables().get("accumulatedCost");
-            if (costLimitObj instanceof Number && currentCostObj instanceof Number) {
+            if (costLimitObj instanceof Number) {
                 double costLimit = ((Number) costLimitObj).doubleValue();
-                double currentCost = ((Number) currentCostObj).doubleValue();
-                if (currentCost >= costLimit) {
-                    return TerminationDecision.terminate("Cost budget exceeded: " + currentCost + " >= " + costLimit, LoopState.FAILED);
+                double currentCost = ((Number) state.variables().getOrDefault("accumulatedCost", 0.0)).doubleValue();
+                double estCost = ((Number) state.variables().getOrDefault("estimatedCost", 0.0)).doubleValue();
+
+                boolean exceeded = false;
+                if ("ACTUAL_ONLY".equalsIgnoreCase(policy)) {
+                    exceeded = currentCost >= costLimit;
+                } else if ("ESTIMATED_ONLY".equalsIgnoreCase(policy)) {
+                    exceeded = estCost >= costLimit;
+                } else {
+                    exceeded = (currentCost + estCost) >= costLimit;
+                }
+
+                if (exceeded) {
+                    return TerminationDecision.terminate("Cost budget exceeded: " + (currentCost + estCost) + " >= " + costLimit, LoopState.FAILED);
                 }
             }
 
             Object tokenLimitObj = state.variables().get("tokenBudget");
-            Object currentTokensObj = state.variables().get("accumulatedTokens");
-            if (tokenLimitObj instanceof Number && currentTokensObj instanceof Number) {
+            if (tokenLimitObj instanceof Number) {
                 int tokenLimit = ((Number) tokenLimitObj).intValue();
-                int currentTokens = ((Number) currentTokensObj).intValue();
-                if (currentTokens >= tokenLimit) {
-                    return TerminationDecision.terminate("Token budget exceeded: " + currentTokens + " >= " + tokenLimit, LoopState.FAILED);
+                int currentTokens = ((Number) state.variables().getOrDefault("accumulatedTokens", 0)).intValue();
+                int estTokens = ((Number) state.variables().getOrDefault("estimatedTokens", 0)).intValue();
+
+                boolean exceeded = false;
+                if ("ACTUAL_ONLY".equalsIgnoreCase(policy)) {
+                    exceeded = currentTokens >= tokenLimit;
+                } else if ("ESTIMATED_ONLY".equalsIgnoreCase(policy)) {
+                    exceeded = estTokens >= tokenLimit;
+                } else {
+                    exceeded = (currentTokens + estTokens) >= tokenLimit;
+                }
+
+                if (exceeded) {
+                    return TerminationDecision.terminate("Token budget exceeded: " + (currentTokens + estTokens) + " >= " + tokenLimit, LoopState.FAILED);
                 }
             }
         }

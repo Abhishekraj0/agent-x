@@ -8,5 +8,11 @@ public record ModelMetadata(
         String provider,
         int maxContextTokens,
         boolean supportsStreaming,
-        boolean supportsToolCalling
-) {}
+        boolean supportsToolCalling,
+        ModelCapabilities capabilities
+) {
+    public ModelMetadata(String id, String provider, int maxContextTokens, boolean supportsStreaming, boolean supportsToolCalling) {
+        this(id, provider, maxContextTokens, supportsStreaming, supportsToolCalling,
+             new ModelCapabilities(supportsStreaming, supportsToolCalling, false, false, false));
+    }
+}

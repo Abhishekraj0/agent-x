@@ -1,5 +1,6 @@
 package com.abhishekraj0.api.context;
 
+import com.abhishekraj0.api.agent.CancellationToken;
 import com.abhishekraj0.api.model.ChatMessage;
 import java.util.List;
 import java.util.Map;
@@ -11,5 +12,10 @@ public record AgentContext(
         List<ChatMessage> messages,
         Map<String, Object> variables,
         String systemInstruction,
-        Map<String, Object> metadata
-) {}
+        Map<String, Object> metadata,
+        CancellationToken cancellationToken
+) {
+    public AgentContext(List<ChatMessage> messages, Map<String, Object> variables, String systemInstruction, Map<String, Object> metadata) {
+        this(messages, variables, systemInstruction, metadata, null);
+    }
+}

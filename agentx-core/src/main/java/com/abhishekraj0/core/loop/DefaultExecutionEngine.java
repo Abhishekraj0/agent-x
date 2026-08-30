@@ -120,7 +120,8 @@ public class DefaultExecutionEngine implements ExecutionEngine {
                         Map.of("toolName", tool.id().name(), "arguments", toolCall.argumentsJson())
                 );
 
-                AgentContext currentAgentContext = new AgentContext(updatedHistory, state.variables(), "", Map.of());
+                com.abhishekraj0.api.agent.CancellationToken token = com.abhishekraj0.core.agent.DefaultCancellationToken.get(state.executionId());
+                AgentContext currentAgentContext = new AgentContext(updatedHistory, state.variables(), "", Map.of(), token);
 
                 // Validate Guardrails
                 for (Guardrail guardrail : guardrails) {
@@ -181,7 +182,7 @@ public class DefaultExecutionEngine implements ExecutionEngine {
                     parsedArgs = Map.of();
                 }
 
-                ToolContext toolContext = new ToolContext(state.executionId(), parsedArgs, state.variables());
+                ToolContext toolContext = new ToolContext(state.executionId(), parsedArgs, state.variables(), token);
                 ToolResult toolResult = tool.execute(toolContext);
 
                 String toolOutput = toolResult.success() ? toolResult.output() : "Error: " + toolResult.error().message();

@@ -37,7 +37,13 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
     @Override
     public AgentResponse execute(AgentRequest request) {
         String execId = request.executionId();
-        cancellations.put(execId, false);
+        DefaultCancellationToken ct = new DefaultCancellationToken();
+        DefaultCancellationToken.register(execId, ct);
+        if (Boolean.TRUE.equals(cancellations.get(execId))) {
+            ct.cancel();
+        } else {
+            cancellations.put(execId, false);
+        }
         AgentState initialState = AgentState.initial(execId);
         AgentExecution execution = new AgentExecution(execId, request, initialState, Instant.now(), null);
         executions.put(execId, execution);
@@ -61,6 +67,7 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
             throw e;
         } finally {
             cancellations.remove(execId);
+            DefaultCancellationToken.deregister(execId);
         }
     }
 
@@ -113,7 +120,13 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
                 "INITIALIZED"
         );
 
-        cancellations.put(executionId, false);
+        DefaultCancellationToken ct = new DefaultCancellationToken();
+        DefaultCancellationToken.register(executionId, ct);
+        if (Boolean.TRUE.equals(cancellations.get(executionId))) {
+            ct.cancel();
+        } else {
+            cancellations.put(executionId, false);
+        }
         AgentExecution execution = new AgentExecution(executionId, new AgentRequest(snapshot.goal()), restoredState, snapshot.timestamp(), null);
         executions.put(executionId, execution);
 
@@ -136,13 +149,16 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
             throw e;
         } finally {
             cancellations.remove(executionId);
+            DefaultCancellationToken.deregister(executionId);
         }
     }
 
     @Override
     public void cancel(String executionId) {
-        if (cancellations.containsKey(executionId)) {
-            cancellations.put(executionId, true);
+        cancellations.put(executionId, true);
+        CancellationToken token = DefaultCancellationToken.get(executionId);
+        if (token instanceof DefaultCancellationToken dct) {
+            dct.cancel();
         }
     }
 
@@ -152,6 +168,7 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
     }
 
     public boolean isCancelled(String executionId) {
-        return cancellations.getOrDefault(executionId, false);
+        CancellationToken token = DefaultCancellationToken.get(executionId);
+        return (token != null && token.isCancelled()) || cancellations.getOrDefault(executionId, false);
     }
 }

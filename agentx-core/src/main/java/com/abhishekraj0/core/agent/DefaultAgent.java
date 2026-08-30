@@ -22,7 +22,7 @@ import java.util.List;
 /**
  * Default implementation of Agent executing the runtime and looping sequences, supporting durable resume.
  */
-public class DefaultAgent implements Agent, ResumableAgentRuntime {
+public class DefaultAgent implements Agent, ResumableAgentRuntime, AgentRuntime {
 
     private final ChatModel model;
     private final Planner planner;
@@ -41,6 +41,10 @@ public class DefaultAgent implements Agent, ResumableAgentRuntime {
     private final CheckpointManager checkpointManager;
     private final IdempotencyManager idempotencyManager;
 
+    private final java.util.Map<String, DefaultAgentRuntime> activeRuntimes = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Map<String, Boolean> pendingCancellations = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Map<String, AgentExecution> completedExecutions = new java.util.concurrent.ConcurrentHashMap<>();
+ 
     private AgentState lastState;
 
     public DefaultAgent(AgentX.Builder builder) {
@@ -62,6 +66,11 @@ public class DefaultAgent implements Agent, ResumableAgentRuntime {
     }
 
     @Override
+    public AgentResponse execute(AgentRequest request) {
+        return run(request);
+    }
+
+    @Override
     public AgentResponse run(AgentRequest request) {
         ExecutionEngine engine = new DefaultExecutionEngine(model, tools, guardrails, permissionManager, approvalProvider, eventBus);
         AgentLoop loop = new DefaultAgentLoop(
@@ -69,10 +78,23 @@ public class DefaultAgent implements Agent, ResumableAgentRuntime {
                 executionStore, checkpointManager, idempotencyManager
         );
         DefaultAgentRuntime runtime = new DefaultAgentRuntime(loop, executionStore, checkpointManager);
+        activeRuntimes.put(request.executionId(), runtime);
+        if (Boolean.TRUE.equals(pendingCancellations.get(request.executionId()))) {
+            runtime.cancel(request.executionId());
+        }
 
-        AgentResponse response = runtime.execute(request);
-        this.lastState = response.state();
-        return response;
+        try {
+            AgentResponse response = runtime.execute(request);
+            this.lastState = response.state();
+            return response;
+        } finally {
+            AgentExecution exec = runtime.getExecution(request.executionId());
+            if (exec != null) {
+                completedExecutions.put(request.executionId(), exec);
+            }
+            activeRuntimes.remove(request.executionId());
+            pendingCancellations.remove(request.executionId());
+        }
     }
 
     @Override
@@ -83,9 +105,50 @@ public class DefaultAgent implements Agent, ResumableAgentRuntime {
                 executionStore, checkpointManager, idempotencyManager
         );
         DefaultAgentRuntime runtime = new DefaultAgentRuntime(loop, executionStore, checkpointManager);
-        AgentResponse response = runtime.resume(executionId, input);
-        this.lastState = response.state();
-        return response;
+        activeRuntimes.put(executionId, runtime);
+        if (Boolean.TRUE.equals(pendingCancellations.get(executionId))) {
+            runtime.cancel(executionId);
+        }
+
+        try {
+            AgentResponse response = runtime.resume(executionId, input);
+            this.lastState = response.state();
+            return response;
+        } finally {
+            AgentExecution exec = runtime.getExecution(executionId);
+            if (exec != null) {
+                completedExecutions.put(executionId, exec);
+            }
+            activeRuntimes.remove(executionId);
+            pendingCancellations.remove(executionId);
+        }
+    }
+
+    @Override
+    public void cancel(String executionId) {
+        pendingCancellations.put(executionId, true);
+        DefaultAgentRuntime runtime = activeRuntimes.get(executionId);
+        if (runtime != null) {
+            runtime.cancel(executionId);
+        }
+    }
+
+    @Override
+    public AgentExecution getExecution(String executionId) {
+        DefaultAgentRuntime runtime = activeRuntimes.get(executionId);
+        if (runtime != null) {
+            return runtime.getExecution(executionId);
+        }
+        AgentExecution completed = completedExecutions.get(executionId);
+        if (completed != null) {
+            return completed;
+        }
+        if (executionStore != null) {
+            return executionStore.find(executionId)
+                    .map(snapshot -> new AgentExecution(executionId, new AgentRequest(snapshot.goal()), snapshot.state(), snapshot.timestamp(), null))
+                    .orElse(null);
+        }
+        return null;
     }
 
     @Override
