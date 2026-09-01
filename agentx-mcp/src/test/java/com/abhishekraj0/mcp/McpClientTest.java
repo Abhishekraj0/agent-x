@@ -31,15 +31,14 @@ public class McpClientTest {
         // Mock Tool attributes
         when(mcpTool.name()).thenReturn("test-tool");
         when(mcpTool.description()).thenReturn("Test Description");
-        
+
         // Mock input schema mapping
-        Map<String, Object> mockSchema = Map.of("type", "object");
+        Map<String, Object> mockSchema = Map.of("type", "object", "properties", Map.of("input", Map.of("type", "string")));
         doReturn(mockSchema).when(mcpTool).inputSchema();
 
         // Mock Tool Execution result
         McpSchema.TextContent textContent = new McpSchema.TextContent("mcp-tool-response");
-        
-        // We cast List to satisfy wildcards in Content list
+
         List<McpSchema.Content> contentList = List.of(textContent);
         when(callResult.content()).thenReturn(contentList);
 
@@ -51,7 +50,8 @@ public class McpClientTest {
         assertEquals("test-tool", wrapper.id().name());
         assertEquals("Test Description", wrapper.description());
         assertNotNull(wrapper.inputSchema());
-        assertEquals("{\"type\":\"object\"}", wrapper.inputSchema().type());
+        assertEquals("object", wrapper.inputSchema().type());
+        assertTrue(wrapper.inputSchema().properties().stream().anyMatch(p -> p.name().equals("input")));
 
         // Execute Tool
         ToolContext context = new ToolContext("session-1", Map.of("input", "hello"));

@@ -16,6 +16,6 @@ Below is the verification matrix for all current features in AgentX, indicating 
 | **Tool Idempotency** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Model Fallback & Circuit Breakers** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Cost & Budget Enforcement** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
-| **MCP Integration** | YES | YES | YES | YES | YES | NO | NO | NO | **YELLOW** |
+| **MCP Integration (Iteration 5)** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Spring Boot Integration** | YES | YES | YES | YES | YES | NO | NO | NO | **YELLOW** |
 | **Plugin Ecosystem** | YES | NO | NO | NO | NO | NO | NO | NO | **RED** |
