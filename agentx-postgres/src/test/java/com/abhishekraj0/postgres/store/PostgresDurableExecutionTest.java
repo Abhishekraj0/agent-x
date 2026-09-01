@@ -293,4 +293,118 @@ public class PostgresDurableExecutionTest {
         assertTrue(finalSnapshot.isPresent());
         assertEquals("COMPLETED", finalSnapshot.get().loopState());
     }
+
+    @Test
+    public void testDatabaseConcurrencyConflict() {
+        PostgresAgentExecutionStore store = new PostgresAgentExecutionStore(dataSource);
+        String execId = UUID.randomUUID().toString();
+
+        AgentState state = new AgentState(execId, List.of(), null, java.util.Map.of(), 0, 0, "INITIALIZING");
+        AgentExecutionSnapshot snapshot = new AgentExecutionSnapshot(
+                execId,
+                "agent-1",
+                "Buy milk",
+                state,
+                "RUNNING",
+                null,
+                1,
+                0,
+                List.of(),
+                List.of(),
+                null,
+                "NONE",
+                java.util.Map.of(),
+                java.time.Instant.now(),
+                java.util.Map.of(),
+                0
+        );
+
+        // First save creates the record with version 1
+        store.save(snapshot);
+
+        // Load two instances of the snapshot representing two runtimes (both with version 1)
+        Optional<AgentExecutionSnapshot> snapA = store.find(execId);
+        Optional<AgentExecutionSnapshot> snapB = store.find(execId);
+        assertTrue(snapA.isPresent());
+        assertTrue(snapB.isPresent());
+        assertEquals(1, snapA.get().version());
+        assertEquals(1, snapB.get().version());
+
+        // Runtime A updates: version changes from 1 to 2
+        AgentExecutionSnapshot updateA = new AgentExecutionSnapshot(
+                execId, "agent-1", "Buy milk", state, "RUNNING", null, 1, 0,
+                List.of(), List.of(), null, "NONE", java.util.Map.of(),
+                java.time.Instant.now(), java.util.Map.of(), snapA.get().version()
+        );
+        store.save(updateA);
+
+        // Verify version is now 2 in DB
+        Optional<AgentExecutionSnapshot> snapUpdated = store.find(execId);
+        assertEquals(2, snapUpdated.get().version());
+
+        // Runtime B tries to update using version 1 snapshot: must fail with ConcurrentModificationException
+        AgentExecutionSnapshot updateB = new AgentExecutionSnapshot(
+                execId, "agent-1", "Buy milk", state, "RUNNING", null, 1, 0,
+                List.of(), List.of(), null, "NONE", java.util.Map.of(),
+                java.time.Instant.now(), java.util.Map.of(), snapB.get().version()
+        );
+        assertThrows(java.util.ConcurrentModificationException.class, () -> store.save(updateB));
+    }
+
+    @Test
+    public void testConcurrentResumeConflict() {
+        PostgresAgentExecutionStore store = new PostgresAgentExecutionStore(dataSource);
+        String execId = UUID.randomUUID().toString();
+
+        AgentState state = new AgentState(execId, List.of(), null, java.util.Map.of("pending_tool_call_id", "pay-1"), 0, 0, "WAITING_APPROVAL");
+        AgentExecutionSnapshot snapshot = new AgentExecutionSnapshot(
+                execId,
+                "agent-1",
+                "Buy milk",
+                state,
+                "WAITING_APPROVAL",
+                null,
+                1,
+                0,
+                List.of(),
+                List.of(),
+                null,
+                "NONE",
+                java.util.Map.of(),
+                java.time.Instant.now(),
+                java.util.Map.of(),
+                0
+        );
+        store.save(snapshot);
+
+        MockChatModel model = new MockChatModel();
+        model.setHandler(req -> new ChatResponse(ChatMessage.assistant("Done"), new TokenUsage(1, 1, 2), "STOP"));
+
+        Agent runtimeA = AgentX.builder()
+                .model(model)
+                .executionStore(store)
+                .goalEvaluator(s -> GoalStatus.COMPLETE)
+                .build();
+
+        Agent runtimeB = AgentX.builder()
+                .model(model)
+                .executionStore(store)
+                .goalEvaluator(s -> GoalStatus.COMPLETE)
+                .build();
+
+        // Simulate Runtime A resuming: it loads version 1, saves running status, and completes.
+        ResumeInput input = ResumeInput.ofApproval(new ApprovalResult(true, "Admin", "Payment approved"));
+        AgentResponse resA = ((ResumableAgentRuntime) runtimeA).resume(execId, input);
+        assertEquals("COMPLETED", resA.state().status());
+
+        // Now, if we manually try to save a snapshot with a stale version to simulate a concurrent write
+        // during B's resume phase:
+        AgentExecutionSnapshot staleSnapshot = new AgentExecutionSnapshot(
+                execId, "agent-1", "Buy milk", state, "RUNNING", null, 1, 0,
+                List.of(), List.of(), null, "NONE", java.util.Map.of(),
+                java.time.Instant.now(), java.util.Map.of(), 1 // Stale version 1
+        );
+
+        assertThrows(java.util.ConcurrentModificationException.class, () -> store.save(staleSnapshot));
+    }
 }

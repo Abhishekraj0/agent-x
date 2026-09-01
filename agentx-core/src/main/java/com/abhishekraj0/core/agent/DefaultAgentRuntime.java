@@ -125,6 +125,32 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
                 "INITIALIZED"
         );
 
+        AgentExecutionSnapshot runningSnapshot = new AgentExecutionSnapshot(
+                snapshot.executionId(),
+                snapshot.agentId(),
+                snapshot.goal(),
+                restoredState,
+                "RUNNING",
+                snapshot.plan(),
+                snapshot.iteration(),
+                snapshot.toolCallCount(),
+                snapshot.observations(),
+                snapshot.memoryReferences(),
+                snapshot.pendingDecision(),
+                snapshot.approvalState(),
+                snapshot.budgets(),
+                snapshot.timestamp(),
+                snapshot.metadata(),
+                snapshot.version()
+        );
+        try {
+            executionStore.save(runningSnapshot);
+        } catch (java.util.ConcurrentModificationException e) {
+            throw new AgentFailure(FailureType.INVALID_STATE, "EXECUTION_ALREADY_RUNNING",
+                    "Execution " + executionId + " is already running or has been modified by another runtime instance",
+                    false, executionId, e);
+        }
+
         DefaultCancellationToken ct = new DefaultCancellationToken();
         DefaultCancellationToken.register(executionId, ct);
         if (Boolean.TRUE.equals(cancellations.get(executionId))) {
