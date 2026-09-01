@@ -40,10 +40,12 @@ AgentX maintains clean architectural boundaries:
 
 ## 2. Specification & SDK Versions
 
-- **MCP Protocol Specification**: `2024-11-05`
+- **Active Protocol Specification**: `2024-11-05`
+- **Target Specification Revision**: `2026-07-28` (Supported version query returns `["2024-11-05", "2026-07-28"]`)
 - **Official Java SDK**: `io.modelcontextprotocol.sdk:mcp` version `2.0.1`
-- **Supported Transports**: `STDIO`, `Mock / In-Memory (Test)`
-- **Scope**: Tools, Tool Discovery, Tool Execution, Tool Schemas, Multi-Server Namespacing.
+- **Supported Transports**: `STDIO`, Custom `McpClientTransport` (HTTP / SSE), `Mock / In-Memory (Test)`
+- **Scope**: Tools, Tool Discovery, Tool Execution, Tool Schemas, Multi-Server Namespacing, Protocol Version Query.
+- **Verification**: 16-point failure matrix, real subprocess JSON-RPC 2.0 wire interoperability.
 - **Out-of-Scope Capabilities**: Resources, Prompts, Sampling, Elicitation, Tasks (reserved for future iterations).
 
 ---

@@ -108,6 +108,15 @@ public class AgentXMcpTestServer {
                 contentList = List.of(new TextContent("Customer " + custId + " deleted successfully"));
                 break;
             }
+            case "invalidArgTool": {
+                if (args == null || !args.containsKey("id") || args.get("id") == null) {
+                    contentList = List.of(new TextContent("Missing required parameter: id"));
+                    isError = true;
+                } else {
+                    contentList = List.of(new TextContent("Processed id: " + args.get("id")));
+                }
+                break;
+            }
             case "slowTool": {
                 try {
                     Thread.sleep(200);
@@ -154,6 +163,12 @@ public class AgentXMcpTestServer {
     public AgentXMcpTestServer registerTool(String name, String description, Map<String, Object> inputSchema) {
         Tool tool = new Tool(name, name, description, inputSchema, null, null, null);
         registeredTools.add(tool);
+        return this;
+    }
+
+    public AgentXMcpTestServer unregisterTool(String name) {
+        registeredTools.removeIf(t -> t.name().equals(name));
+        metadataMap.remove(name);
         return this;
     }
 
