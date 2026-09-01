@@ -64,49 +64,91 @@ public class PostgresAgentExecutionStore implements AgentExecutionStore {
 
     @Override
     public void save(AgentExecutionSnapshot snapshot) {
-        String insertSql = "INSERT INTO agent_execution_snapshot (" +
-                "  execution_id, agent_id, goal, state_json, loop_state, plan_json, iteration, " +
-                "  tool_call_count, observations_json, memory_references_json, pending_decision_json, " +
-                "  approval_state, budgets_json, timestamp, metadata_json, version" +
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-                "ON CONFLICT (execution_id) DO UPDATE SET " +
-                "  agent_id = EXCLUDED.agent_id," +
-                "  goal = EXCLUDED.goal," +
-                "  state_json = EXCLUDED.state_json," +
-                "  loop_state = EXCLUDED.loop_state," +
-                "  plan_json = EXCLUDED.plan_json," +
-                "  iteration = EXCLUDED.iteration," +
-                "  tool_call_count = EXCLUDED.tool_call_count," +
-                "  observations_json = EXCLUDED.observations_json," +
-                "  memory_references_json = EXCLUDED.memory_references_json," +
-                "  pending_decision_json = EXCLUDED.pending_decision_json," +
-                "  approval_state = EXCLUDED.approval_state," +
-                "  budgets_json = EXCLUDED.budgets_json," +
-                "  timestamp = EXCLUDED.timestamp," +
-                "  metadata_json = EXCLUDED.metadata_json," +
-                "  version = agent_execution_snapshot.version + 1";
+        try (Connection conn = dataSource.getConnection()) {
+            boolean exists = false;
+            int dbVersion = 0;
+            String checkSql = "SELECT version FROM agent_execution_snapshot WHERE execution_id = ?";
+            try (PreparedStatement ps = conn.prepareStatement(checkSql)) {
+                ps.setString(1, snapshot.executionId());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        exists = true;
+                        dbVersion = rs.getInt("version");
+                    }
+                }
+            }
 
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(insertSql)) {
+            if (!exists) {
+                String insertSql = "INSERT INTO agent_execution_snapshot (" +
+                        "  execution_id, agent_id, goal, state_json, loop_state, plan_json, iteration, " +
+                        "  tool_call_count, observations_json, memory_references_json, pending_decision_json, " +
+                        "  approval_state, budgets_json, timestamp, metadata_json, version" +
+                        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+                    ps.setString(1, snapshot.executionId());
+                    ps.setString(2, snapshot.agentId());
+                    ps.setString(3, snapshot.goal());
+                    ps.setString(4, toJson(snapshot.state()));
+                    ps.setString(5, snapshot.loopState());
+                    ps.setString(6, toJson(snapshot.plan()));
+                    ps.setInt(7, snapshot.iteration());
+                    ps.setInt(8, snapshot.toolCallCount());
+                    ps.setString(9, toJson(snapshot.observations()));
+                    ps.setString(10, toJson(snapshot.memoryReferences()));
+                    ps.setString(11, toJson(snapshot.pendingDecision()));
+                    ps.setString(12, snapshot.approvalState());
+                    ps.setString(13, toJson(snapshot.budgets()));
+                    ps.setTimestamp(14, snapshot.timestamp() != null ? Timestamp.from(snapshot.timestamp()) : null);
+                    ps.setString(15, toJson(snapshot.metadata()));
+                    ps.setInt(16, 1);
+                    ps.executeUpdate();
+                }
+            } else {
+                if (snapshot.version() > 0 && snapshot.version() != dbVersion) {
+                    throw new java.util.ConcurrentModificationException("Optimistic locking failure: expected version " + snapshot.version() + " but database has version " + dbVersion);
+                }
 
-            ps.setString(1, snapshot.executionId());
-            ps.setString(2, snapshot.agentId());
-            ps.setString(3, snapshot.goal());
-            ps.setString(4, toJson(snapshot.state()));
-            ps.setString(5, snapshot.loopState());
-            ps.setString(6, toJson(snapshot.plan()));
-            ps.setInt(7, snapshot.iteration());
-            ps.setInt(8, snapshot.toolCallCount());
-            ps.setString(9, toJson(snapshot.observations()));
-            ps.setString(10, toJson(snapshot.memoryReferences()));
-            ps.setString(11, toJson(snapshot.pendingDecision()));
-            ps.setString(12, snapshot.approvalState());
-            ps.setString(13, toJson(snapshot.budgets()));
-            ps.setTimestamp(14, snapshot.timestamp() != null ? Timestamp.from(snapshot.timestamp()) : null);
-            ps.setString(15, toJson(snapshot.metadata()));
-            ps.setInt(16, 1);
+                String updateSql = "UPDATE agent_execution_snapshot SET " +
+                        "  agent_id = ?," +
+                        "  goal = ?," +
+                        "  state_json = ?," +
+                        "  loop_state = ?," +
+                        "  plan_json = ?," +
+                        "  iteration = ?," +
+                        "  tool_call_count = ?," +
+                        "  observations_json = ?," +
+                        "  memory_references_json = ?," +
+                        "  pending_decision_json = ?," +
+                        "  approval_state = ?," +
+                        "  budgets_json = ?," +
+                        "  timestamp = ?," +
+                        "  metadata_json = ?," +
+                        "  version = version + 1 " +
+                        "WHERE execution_id = ? AND version = ?";
+                try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
+                    ps.setString(1, snapshot.agentId());
+                    ps.setString(2, snapshot.goal());
+                    ps.setString(3, toJson(snapshot.state()));
+                    ps.setString(4, snapshot.loopState());
+                    ps.setString(5, toJson(snapshot.plan()));
+                    ps.setInt(6, snapshot.iteration());
+                    ps.setInt(7, snapshot.toolCallCount());
+                    ps.setString(8, toJson(snapshot.observations()));
+                    ps.setString(9, toJson(snapshot.memoryReferences()));
+                    ps.setString(10, toJson(snapshot.pendingDecision()));
+                    ps.setString(11, snapshot.approvalState());
+                    ps.setString(12, toJson(snapshot.budgets()));
+                    ps.setTimestamp(13, snapshot.timestamp() != null ? Timestamp.from(snapshot.timestamp()) : null);
+                    ps.setString(14, toJson(snapshot.metadata()));
+                    ps.setString(15, snapshot.executionId());
+                    ps.setInt(16, dbVersion);
 
-            ps.executeUpdate();
+                    int updated = ps.executeUpdate();
+                    if (updated == 0) {
+                        throw new java.util.ConcurrentModificationException("Optimistic locking failure: version conflict on update for execution " + snapshot.executionId());
+                    }
+                }
+            }
         } catch (SQLException e) {
             throw new RuntimeException("Failed to save snapshot " + snapshot.executionId(), e);
         }
@@ -144,7 +186,8 @@ public class PostgresAgentExecutionStore implements AgentExecutionStore {
                             rs.getString("approval_state"),
                             budgets,
                             ts != null ? ts.toInstant() : null,
-                            metadata
+                            metadata,
+                            rs.getInt("version")
                     );
                     return Optional.of(snapshot);
                 }

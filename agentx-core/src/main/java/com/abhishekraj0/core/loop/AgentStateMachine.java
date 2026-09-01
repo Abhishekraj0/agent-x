@@ -43,19 +43,19 @@ public class AgentStateMachine {
             case CREATED:
                 return to == LoopState.INITIALIZING;
             case INITIALIZING:
-                return to == LoopState.UNDERSTANDING;
+                return to == LoopState.UNDERSTANDING || to == LoopState.COMPLETED;
             case UNDERSTANDING:
-                return to == LoopState.BUILDING_CONTEXT;
+                return to == LoopState.BUILDING_CONTEXT || to == LoopState.COMPLETED;
             case BUILDING_CONTEXT:
-                return to == LoopState.RETRIEVING_MEMORY;
+                return to == LoopState.RETRIEVING_MEMORY || to == LoopState.COMPLETED;
             case RETRIEVING_MEMORY:
-                return to == LoopState.RESOLVING_TOOLS;
+                return to == LoopState.RESOLVING_TOOLS || to == LoopState.COMPLETED;
             case RESOLVING_TOOLS:
-                return to == LoopState.PLANNING;
+                return to == LoopState.PLANNING || to == LoopState.COMPLETED;
             case PLANNING:
-                return to == LoopState.DECIDING;
+                return to == LoopState.DECIDING || to == LoopState.COMPLETED;
             case DECIDING:
-                return to == LoopState.VALIDATING || to == LoopState.REPLANNING || to == LoopState.WAITING_FOR_USER || to == LoopState.WAITING_FOR_APPROVAL;
+                return to == LoopState.VALIDATING || to == LoopState.REPLANNING || to == LoopState.WAITING_FOR_USER || to == LoopState.WAITING_FOR_APPROVAL || to == LoopState.COMPLETED;
             case VALIDATING:
                 return to == LoopState.AUTHORIZING;
             case AUTHORIZING:
