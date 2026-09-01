@@ -89,7 +89,8 @@ public class DefaultAgentRuntime implements AgentRuntime, ResumableAgentRuntime 
         AgentState state = snapshot.state();
 
         if (!"WAITING_APPROVAL".equals(state.status()) && !"WAITING_FOR_USER".equals(state.status())) {
-            throw new AgentFailure(FailureType.INVALID_STATE, "INVALID_STATUS", "Cannot resume execution in status: " + state.status(), false, executionId, null);
+            String code = ("RUNNING".equals(snapshot.loopState()) || "RUNNING".equals(state.status())) ? "EXECUTION_ALREADY_RUNNING" : "INVALID_STATUS";
+            throw new AgentFailure(FailureType.INVALID_STATE, code, "Cannot resume execution in status: " + state.status(), false, executionId, null);
         }
 
         Map<String, Object> updatedVariables = new HashMap<>(state.variables() != null ? state.variables() : Map.of());
