@@ -67,21 +67,24 @@ An independent, adversarial Staff/Principal Engineer level audit was conducted a
 
 ---
 
-## 4. Tracked Audit Issues
+## 4. GitHub Issues Created
 
-### Issue #1: `[P2] MemoryContextHolder ThreadLocal lacks async context propagation for custom worker threads`
+### Issue #23 — `[P2] MemoryContextHolder ThreadLocal lacks async context propagation for worker threads`
+* **GitHub Link**: [https://github.com/Abhishekraj0/agent-x/issues/23](https://github.com/Abhishekraj0/agent-x/issues/23)
 * **Summary**: `MemoryContextHolder` uses standard `ThreadLocal<String>`. If user code inside a custom tool spawns async child threads via `CompletableFuture.supplyAsync()` or `ExecutorService` without copying the context, `MemoryContextHolder.getExecutionId()` returns `null`.
 * **Severity**: P2 (Important)
 * **Affected Area**: `com.abhishekraj0.api.memory.MemoryContextHolder`
 * **Suggested Remediation**: Provide a `MemoryContextHolder.wrap(Runnable/Callable)` helper or use an inherited/scoped context carrier for async thread pools.
 
-### Issue #2: `[P2] MCP Modern 2026-07-28 stateless session support blocked by official Java MCP SDK 2.0.1`
+### Issue #24 — `[P2] MCP Modern 2026-07-28 stateless session support blocked by official Java MCP SDK 2.0.1`
+* **GitHub Link**: [https://github.com/Abhishekraj0/agent-x/issues/24](https://github.com/Abhishekraj0/agent-x/issues/24)
 * **Summary**: Modern MCP specification (`2026-07-28`) introduces modern stateless session management. However, `io.modelcontextprotocol.sdk:mcp:2.0.1` only implements Legacy `2024-11-05` transport.
 * **Severity**: P2 (Important / Dependency Blocked)
 * **Affected Area**: `agentx-mcp`
 * **Suggested Remediation**: Maintain `YELLOW` status for modern MCP 2026 until Java MCP SDK releases 2.1.x / 3.0.x with modern client session support.
 
-### Issue #3: `[P2] Spring Boot Integration module lacks full Spring Boot Web E2E integration test suite`
+### Issue #25 — `[P2] Spring Boot Integration module lacks full Spring Boot Web E2E integration test suite`
+* **GitHub Link**: [https://github.com/Abhishekraj0/agent-x/issues/25](https://github.com/Abhishekraj0/agent-x/issues/25)
 * **Summary**: `agentx-spring` includes `AgentAutoConfigurationTest` for context runner verification, but lacks `@SpringBootTest` web runner integration tests.
 * **Severity**: P2 (Important)
 * **Affected Area**: `agentx-spring`
@@ -91,11 +94,11 @@ An independent, adversarial Staff/Principal Engineer level audit was conducted a
 
 ## 5. Audit Summary Table
 
-| Issue ID | Severity | Feature Area | Description | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| **#1** | P2 | Memory / Context | ThreadLocal async context propagation wrapper for worker threads | OPEN |
-| **#2** | P2 | MCP Modern 2026 | Dependency-blocked by official Java MCP SDK 2.0.1 | OPEN (Documented Limitation) |
-| **#3** | P2 | Spring Integration | E2E `@SpringBootTest` web integration suite | OPEN |
+| Issue ID | GitHub Link | Severity | Feature Area | Description | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **#23** | [Issue #23](https://github.com/Abhishekraj0/agent-x/issues/23) | P2 | Memory / Context | ThreadLocal async context propagation wrapper for worker threads | OPEN |
+| **#24** | [Issue #24](https://github.com/Abhishekraj0/agent-x/issues/24) | P2 | MCP Modern 2026 | Dependency-blocked by official Java MCP SDK 2.0.1 | OPEN |
+| **#25** | [Issue #25](https://github.com/Abhishekraj0/agent-x/issues/25) | P2 | Spring Integration | E2E `@SpringBootTest` web integration suite | OPEN |
 
 ### Issue Severity Totals
 * **P0 (Production Blocker)**: 0
