@@ -38,15 +38,21 @@ AgentX maintains clean architectural boundaries:
 
 ---
 
-## 2. Specification & SDK Versions
+## 2. Protocol Eras & Version Negotiation
 
-- **Active Protocol Specification**: `2024-11-05`
-- **Target Specification Revision**: `2026-07-28` (Supported version query returns `["2024-11-05", "2026-07-28"]`)
-- **Official Java SDK**: `io.modelcontextprotocol.sdk:mcp` version `2.0.1`
-- **Supported Transports**: `STDIO`, Custom `McpClientTransport` (HTTP / SSE), `Mock / In-Memory (Test)`
-- **Scope**: Tools, Tool Discovery, Tool Execution, Tool Schemas, Multi-Server Namespacing, Protocol Version Query.
-- **Verification**: 16-point failure matrix, real subprocess JSON-RPC 2.0 wire interoperability.
-- **Out-of-Scope Capabilities**: Resources, Prompts, Sampling, Elicitation, Tasks (reserved for future iterations).
+AgentX distinguishes between MCP protocol eras:
+
+### A. Legacy Era (2024-10-07 through 2024-11-05) — Certified GREEN
+- **Active Negotiated Protocol**: `2024-11-05`
+- **Lifecycle**: Stateful session initialization (`initialize` request -> `notifications/initialized` notification).
+- **Transport**: STDIO pipes and custom `McpClientTransport` instances.
+- **SDK Implementation**: Native support in `io.modelcontextprotocol.sdk:mcp:2.0.1`.
+
+### B. Modern Era (2026-07-28) — Certified YELLOW (SDK 2.0.1 Limitation)
+- **Characteristics**: Stateless header-based processing, `server/discover` method, no `initialize` handshake, no sticky session requirement.
+- **Audit Findings**: The Java SDK `2.0.1` client adapter hardcodes legacy `initialize` handshake and does not expose native `server/discover` wire methods.
+- **Verification**: Verified via `Mcp2026ModernStdioInteropTest.java` against independent subprocess `Mcp2026ModernServerProcess.java`.
+- **API Realism**: `supportedProtocolVersions()` explicitly advertises `["2024-11-05"]` to prevent false capability claims.
 
 ---
 

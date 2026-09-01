@@ -50,6 +50,6 @@ public interface McpClient extends ToolProvider {
      * @return list of supported protocol revision identifiers
      */
     default List<String> supportedProtocolVersions() {
-        return List.of("2024-11-05", "2026-07-28");
+        return List.of("2024-11-05");
     }
 }

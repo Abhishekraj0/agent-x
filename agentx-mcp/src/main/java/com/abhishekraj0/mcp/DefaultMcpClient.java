@@ -108,7 +108,7 @@ public class DefaultMcpClient implements McpClient {
 
     @Override
     public List<String> supportedProtocolVersions() {
-        return List.of("2024-11-05", "2026-07-28");
+        return List.of("2024-11-05");
     }
 
     @Override
