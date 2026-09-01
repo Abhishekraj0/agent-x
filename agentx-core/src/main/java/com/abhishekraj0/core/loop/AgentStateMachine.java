@@ -59,7 +59,7 @@ public class AgentStateMachine {
             case VALIDATING:
                 return to == LoopState.AUTHORIZING;
             case AUTHORIZING:
-                return to == LoopState.EXECUTING || to == LoopState.WAITING_FOR_APPROVAL;
+                return to == LoopState.EXECUTING || to == LoopState.WAITING_FOR_APPROVAL || to == LoopState.OBSERVING;
             case WAITING_FOR_APPROVAL:
                 return to == LoopState.EXECUTING || to == LoopState.FAILED || to == LoopState.CANCELLED;
             case EXECUTING:
