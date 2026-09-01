@@ -8,6 +8,7 @@ Below is the verification matrix for all current features in AgentX, indicating 
 | **Concurrent Resume & Optimistic Locking** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Idempotency Failure Recovery** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Unknown Result Recovery Policies** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
+| **Idempotency & Unknown-Result Safety Audit (Iteration 4.5)** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Cancellation Semantics** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Memory Scope Isolation** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Secret Redaction** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
