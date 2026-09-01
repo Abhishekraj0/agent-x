@@ -16,4 +16,21 @@ public interface McpClient extends ToolProvider {
      * Disconnects from the MCP Server.
      */
     void disconnect();
+
+    /**
+     * Reconnects to the MCP Server.
+     */
+    default void reconnect() {
+        disconnect();
+        connect();
+    }
+
+    /**
+     * Checks if the client is currently connected.
+     *
+     * @return true if connected
+     */
+    default boolean isConnected() {
+        return true;
+    }
 }

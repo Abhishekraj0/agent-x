@@ -19,6 +19,12 @@
             <groupId>com.abhishekraj0</groupId>
             <artifactId>agentx-api</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.abhishekraj0</groupId>
+            <artifactId>agentx-core</artifactId>
+            <scope>test</scope>
+        </dependency>
         
         <!-- MCP Client SDK -->
         <dependency>

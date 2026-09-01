@@ -7,10 +7,13 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.ListToolsResult;
+
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,24 +25,69 @@ public class DefaultMcpClient implements McpClient {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultMcpClient.class);
 
+    private final String serverName;
     private final String command;
     private final List<String> args;
     private final Map<String, String> env;
+    private final Function<McpSchema.Tool, ToolMetadata> metadataProvider;
     private McpSyncClient syncClient;
+    private volatile boolean connected = false;
 
     public DefaultMcpClient(String command, List<String> args) {
-        this(command, args, Map.of());
+        this(null, command, args, Map.of(), null);
     }
 
     public DefaultMcpClient(String command, List<String> args, Map<String, String> env) {
+        this(null, command, args, env, null);
+    }
+
+    public DefaultMcpClient(String serverName, String command, List<String> args) {
+        this(serverName, command, args, Map.of(), null);
+    }
+
+    public DefaultMcpClient(String serverName, String command, List<String> args, Map<String, String> env) {
+        this(serverName, command, args, env, null);
+    }
+
+    public DefaultMcpClient(String serverName, String command, List<String> args, Map<String, String> env, Function<McpSchema.Tool, ToolMetadata> metadataProvider) {
+        this.serverName = serverName;
         this.command = command;
         this.args = args;
         this.env = env;
+        this.metadataProvider = metadataProvider;
+    }
+
+    public DefaultMcpClient(McpSyncClient syncClient) {
+        this(null, syncClient, null);
+    }
+
+    public DefaultMcpClient(String serverName, McpSyncClient syncClient) {
+        this(serverName, syncClient, null);
+    }
+
+    public DefaultMcpClient(String serverName, McpSyncClient syncClient, Function<McpSchema.Tool, ToolMetadata> metadataProvider) {
+        this.serverName = serverName;
+        this.command = null;
+        this.args = List.of();
+        this.env = Map.of();
+        this.syncClient = syncClient;
+        this.metadataProvider = metadataProvider;
+        this.connected = (syncClient != null);
+    }
+
+    public String serverName() {
+        return serverName;
     }
 
     @Override
     public void connect() {
-        if (syncClient != null) {
+        if (connected && syncClient != null) {
+            return;
+        }
+        if (command == null) {
+            if (syncClient != null) {
+                this.connected = true;
+            }
             return;
         }
         try {
@@ -59,10 +107,12 @@ public class DefaultMcpClient implements McpClient {
                     .build();
 
             this.syncClient.initialize();
-            log.info("Successfully connected to MCP Server running: {}", command);
+            this.connected = true;
+            log.info("Successfully connected to MCP Server [{}] running command: {}", serverName != null ? serverName : "default", command);
         } catch (Exception e) {
-            log.error("Failed to connect to MCP Server: {}", e.getMessage(), e);
-            throw new RuntimeException("MCP connection failure", e);
+            this.connected = false;
+            log.error("Failed to connect to MCP Server [{}]: {}", serverName != null ? serverName : "default", e.getMessage(), e);
+            throw new RuntimeException("MCP connection failure: " + e.getMessage(), e);
         }
     }
 
@@ -70,19 +120,45 @@ public class DefaultMcpClient implements McpClient {
     public void disconnect() {
         if (syncClient != null) {
             try {
-                syncClient.close();
+                if (command != null) {
+                    syncClient.close();
+                }
             } catch (Exception e) {
-                log.warn("Error closing MCP Sync Client: {}", e.getMessage());
+                log.warn("Error closing MCP Sync Client [{}]: {}", serverName != null ? serverName : "default", e.getMessage());
             } finally {
-                syncClient = null;
+                if (command != null) {
+                    syncClient = null;
+                }
+                connected = false;
             }
+        } else {
+            connected = false;
         }
     }
 
     @Override
+    public void reconnect() {
+        if (command == null && syncClient != null) {
+            this.connected = true;
+            return;
+        }
+        disconnect();
+        connect();
+    }
+
+    @Override
+    public boolean isConnected() {
+        return connected && syncClient != null;
+    }
+
+    @Override
     public List<AgentTool> tools() {
-        if (syncClient == null) {
-            connect();
+        if (!connected || syncClient == null) {
+            if (command != null) {
+                connect();
+            } else if (!connected) {
+                return List.of();
+            }
         }
         try {
             ListToolsResult toolsResult = syncClient.listTools();
@@ -90,10 +166,13 @@ public class DefaultMcpClient implements McpClient {
                 return List.of();
             }
             return toolsResult.tools().stream()
-                    .map(mcpTool -> new McpToolWrapper(mcpTool, syncClient))
+                    .map(mcpTool -> {
+                        ToolMetadata meta = (metadataProvider != null) ? metadataProvider.apply(mcpTool) : null;
+                        return new McpToolWrapper(serverName, mcpTool, syncClient, meta);
+                    })
                     .collect(Collectors.toList());
         } catch (Exception e) {
-            log.error("Failed to list tools from MCP server", e);
+            log.error("Failed to list tools from MCP server [{}]", serverName != null ? serverName : "default", e);
             return List.of();
         }
     }
