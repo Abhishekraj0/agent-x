@@ -1,19 +1,22 @@
 package com.abhishekraj0.api.agent;
 
+import java.util.Map;
+import java.util.UUID;
+
 /**
  * Request details for triggering an agent run.
  */
 public record AgentRequest(
         String input,
         String executionId,
-        AgentOptions options
+        AgentOptions options,
+        Map<String, Object> variables
 ) {
-    /**
-     * Creates an AgentRequest with default options and a random execution ID.
-     *
-     * @param input the input string
-     */
+    public AgentRequest(String input, String executionId, AgentOptions options) {
+        this(input, executionId, options, Map.of());
+    }
+
     public AgentRequest(String input) {
-        this(input, java.util.UUID.randomUUID().toString(), AgentOptions.defaultOptions());
+        this(input, UUID.randomUUID().toString(), AgentOptions.defaultOptions(), Map.of());
     }
 }

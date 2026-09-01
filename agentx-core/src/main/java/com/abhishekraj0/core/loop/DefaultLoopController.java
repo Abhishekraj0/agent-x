@@ -142,6 +142,9 @@ public class DefaultLoopController implements LoopController {
 
         // Initialize state variables to track budgets
         Map<String, Object> variables = new HashMap<>(state.variables() != null ? state.variables() : Map.of());
+        if (request.variables() != null) {
+            variables.putAll(request.variables());
+        }
         variables.putIfAbsent("accumulatedTokens", 0);
         variables.putIfAbsent("accumulatedCost", 0.0);
         variables.putIfAbsent("estimatedTokens", 0);
@@ -555,69 +558,165 @@ public class DefaultLoopController implements LoopController {
                             toolResult = ToolResult.failure("CACHED_ERROR", idempotencyDec.errorMessage(), new RuntimeException(idempotencyDec.errorMessage()));
                         }
                     } else if (idempotencyDec.isUnknownResult()) {
-                        // Unknown result recovery policy
-                        UnknownResultRecoveryPolicy policy = UnknownResultRecoveryPolicy.FAIL_SAFE;
-                        if (request.options() != null && request.options().additionalOptions() != null) {
-                            Object customPolicy = request.options().additionalOptions().get("unknownResultRecoveryPolicy");
-                            if (customPolicy instanceof UnknownResultRecoveryPolicy p) {
-                                policy = p;
-                            }
+                        if (eventBus != null) {
+                            eventBus.publish(new ToolExecutionUnknownEvent(currentState.executionId(), tool.id().name(), tc.id(), idempotencyDec.errorMessage()));
                         }
 
-                        if (policy == UnknownResultRecoveryPolicy.RETRY || (tool.metadata() != null && tool.metadata().idempotent())) {
-                            saveCheckpoint(currentState);
-                            if (idempotencyManager != null && req != null) {
-                                idempotencyManager.recordPending(req);
-                            }
-                            try {
-                                toolResult = executeToolWithTimeout(tool, toolContext, toolTimeout);
-                                if (cb != null) cb.recordSuccess();
-                            } catch (Exception e) {
-                                if (cb != null) cb.recordFailure(e);
-                                throw e;
-                            }
-                        } else if (policy == UnknownResultRecoveryPolicy.REQUIRE_APPROVAL) {
-                            Map<String, Object> updatedVars = new HashMap<>(currentState.variables());
-                            updatedVars.put("pending_unknown_result_tool", tc.id());
+                        // Check if an operator UnknownResultResolution was supplied in variables
+                        Object resObj = currentState.variables().get("unknown_result_resolution_" + tc.id());
+                        if (resObj == null) {
+                            resObj = currentState.variables().get("unknown_result_resolution");
+                        }
+                        UnknownResultResolution resolution = (resObj instanceof UnknownResultResolution r) ? r : null;
 
-                            currentState = new AgentState(
-                                    currentState.executionId(),
-                                    currentState.history(),
-                                    currentState.plan(),
-                                    updatedVars,
-                                    currentState.iterations(),
-                                    currentState.toolCalls(),
-                                    "WAITING_APPROVAL"
-                            );
-
-                            AgentExecutionSnapshot snapshot = new AgentExecutionSnapshot(
-                                    currentState.executionId(),
-                                    "default-agent",
-                                    request.input(),
-                                    currentState,
-                                    "WAITING_FOR_APPROVAL",
-                                    currentState.plan(),
-                                    currentState.iterations(),
-                                    currentState.toolCalls(),
-                                    List.of(),
-                                    List.of(),
-                                    new AskUserDecision("unknown-result-" + tc.id(), "Interrupted non-idempotent tool execution requires verification", "Tool " + tool.id().name() + " was interrupted. Please confirm if the action completed successfully."),
-                                    "PENDING",
-                                    currentState.variables(),
-                                    Instant.now(),
-                                    Map.of()
-                            );
-                            executionStore.save(snapshot);
-                            return new LoopResult(currentState, "Suspended waiting for approval due to unknown tool execution result", false, null);
+                        if (resolution != null) {
+                            if (resolution.type() == UnknownResultResolution.ResolutionType.CONFIRMED_SUCCESS) {
+                                if (eventBus != null) {
+                                    eventBus.publish(new ToolExecutionRecoveredEvent(currentState.executionId(), tool.id().name(), tc.id(), "CONFIRMED_SUCCESS"));
+                                }
+                                String out = resolution.output() != null ? resolution.output() : "CONFIRMED_SUCCESS";
+                                toolResult = ToolResult.success(out);
+                                if (idempotencyManager != null) {
+                                    ToolExecutionResult res = new ToolExecutionResult(
+                                            currentState.executionId(),
+                                            tc.id(),
+                                            tool.id().name(),
+                                            idempotencyKey,
+                                            true,
+                                            out,
+                                            null,
+                                            Instant.now(),
+                                            "COMPLETED"
+                                    );
+                                    idempotencyManager.record(res);
+                                }
+                            } else if (resolution.type() == UnknownResultResolution.ResolutionType.CONFIRMED_FAILURE) {
+                                if (eventBus != null) {
+                                    eventBus.publish(new ToolExecutionRecoveredEvent(currentState.executionId(), tool.id().name(), tc.id(), "CONFIRMED_FAILURE"));
+                                }
+                                String err = resolution.reason() != null ? resolution.reason() : "Human confirmed failure";
+                                toolResult = ToolResult.failure("CONFIRMED_FAILURE", err, new RuntimeException(err));
+                                if (idempotencyManager != null) {
+                                    ToolExecutionResult res = new ToolExecutionResult(
+                                            currentState.executionId(),
+                                            tc.id(),
+                                            tool.id().name(),
+                                            idempotencyKey,
+                                            false,
+                                            null,
+                                            err,
+                                            Instant.now(),
+                                            "FAILED"
+                                    );
+                                    idempotencyManager.record(res);
+                                }
+                            } else { // RETRY_AUTHORIZED
+                                if (eventBus != null) {
+                                    eventBus.publish(new ToolExecutionRecoveredEvent(currentState.executionId(), tool.id().name(), tc.id(), "RETRY_AUTHORIZED"));
+                                }
+                                saveCheckpoint(currentState);
+                                if (idempotencyManager != null && req != null) {
+                                    idempotencyManager.recordPending(req);
+                                }
+                                try {
+                                    toolResult = executeToolWithTimeout(tool, toolContext, toolTimeout);
+                                    if (cb != null) cb.recordSuccess();
+                                } catch (Exception e) {
+                                    if (cb != null) cb.recordFailure(e);
+                                    throw e;
+                                }
+                            }
                         } else {
-                            throw new AgentFailure(
-                                    FailureType.TOOL_FAILURE,
-                                    "UNKNOWN_TOOL_RESULT",
-                                    "Interrupted execution of non-idempotent tool " + tool.id().name() + " outcome is unknown. Safety recovery aborted re-execution.",
-                                    false,
-                                    currentState.executionId(),
-                                    null
-                            );
+                            // Recovery policy evaluation
+                            UnknownResultRecoveryPolicy policy = UnknownResultRecoveryPolicy.FAIL_SAFE;
+                            if (request.options() != null && request.options().additionalOptions() != null) {
+                                Object customPolicy = request.options().additionalOptions().get("unknownResultRecoveryPolicy");
+                                if (customPolicy instanceof UnknownResultRecoveryPolicy p) {
+                                    policy = p;
+                                }
+                            }
+
+                            boolean safeRetry = tool.metadata() != null && tool.metadata().safeAfterUnknownResult();
+
+                            if (policy == UnknownResultRecoveryPolicy.RETRY) {
+                                if (!safeRetry) {
+                                    throw new AgentFailure(
+                                            FailureType.TOOL_FAILURE,
+                                            "UNKNOWN_TOOL_RESULT",
+                                            "Interrupted execution of non-idempotent tool " + tool.id().name() + " is unsafe to retry automatically. Automatic RETRY policy rejected.",
+                                            false,
+                                            currentState.executionId(),
+                                            null
+                                    );
+                                }
+                                saveCheckpoint(currentState);
+                                if (idempotencyManager != null && req != null) {
+                                    idempotencyManager.recordPending(req);
+                                }
+                                try {
+                                    toolResult = executeToolWithTimeout(tool, toolContext, toolTimeout);
+                                    if (cb != null) cb.recordSuccess();
+                                } catch (Exception e) {
+                                    if (cb != null) cb.recordFailure(e);
+                                    throw e;
+                                }
+                            } else if (policy == UnknownResultRecoveryPolicy.REQUIRE_APPROVAL || (!safeRetry && policy != UnknownResultRecoveryPolicy.FAIL_SAFE)) {
+                                Map<String, Object> updatedVars = new HashMap<>(currentState.variables());
+                                updatedVars.put("pending_unknown_result_tool", tc.id());
+
+                                currentState = new AgentState(
+                                        currentState.executionId(),
+                                        currentState.history(),
+                                        currentState.plan(),
+                                        updatedVars,
+                                        currentState.iterations(),
+                                        currentState.toolCalls(),
+                                        "WAITING_APPROVAL"
+                                );
+
+                                AgentExecutionSnapshot snapshot = new AgentExecutionSnapshot(
+                                        currentState.executionId(),
+                                        "default-agent",
+                                        request.input(),
+                                        currentState,
+                                        "WAITING_FOR_APPROVAL",
+                                        currentState.plan(),
+                                        currentState.iterations(),
+                                        currentState.toolCalls(),
+                                        List.of(),
+                                        List.of(),
+                                        new AskUserDecision("unknown-result-" + tc.id(), "Interrupted non-idempotent tool execution requires verification", "Tool " + tool.id().name() + " was interrupted. Please confirm if the action completed successfully."),
+                                        "PENDING",
+                                        currentState.variables(),
+                                        Instant.now(),
+                                        Map.of()
+                                );
+                                executionStore.save(snapshot);
+                                return new LoopResult(currentState, "Suspended waiting for approval due to unknown tool execution result", false, null);
+                            } else { // FAIL_SAFE (Default)
+                                if (safeRetry) {
+                                    saveCheckpoint(currentState);
+                                    if (idempotencyManager != null && req != null) {
+                                        idempotencyManager.recordPending(req);
+                                    }
+                                    try {
+                                        toolResult = executeToolWithTimeout(tool, toolContext, toolTimeout);
+                                        if (cb != null) cb.recordSuccess();
+                                    } catch (Exception e) {
+                                        if (cb != null) cb.recordFailure(e);
+                                        throw e;
+                                    }
+                                } else {
+                                    throw new AgentFailure(
+                                            FailureType.TOOL_FAILURE,
+                                            "UNKNOWN_TOOL_RESULT",
+                                            "Interrupted execution of non-idempotent tool " + tool.id().name() + " outcome is unknown. Safety recovery aborted re-execution.",
+                                            false,
+                                            currentState.executionId(),
+                                            null
+                                    );
+                                }
+                            }
                         }
                     } else {
                         // Checkpoint BEFORE tool execution
