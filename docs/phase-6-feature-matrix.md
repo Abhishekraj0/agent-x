@@ -4,6 +4,10 @@ Below is the verification matrix for all current features in AgentX, indicating 
 
 | Feature | API | Implementation | Runtime Integration | Unit | Integration | E2E | Failure Test | Docs | Status |
 | ------- | --- | -------------- | ------------------- | ---- | ----------- | --- | ------------ | ---- | ------ |
+| **Terminal State Certification** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
+| **Concurrent Resume & Optimistic Locking** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
+| **Idempotency Failure Recovery** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
+| **Unknown Result Recovery Policies** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Cancellation Semantics** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Memory Scope Isolation** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
 | **Secret Redaction** | YES | YES | YES | YES | YES | YES | YES | YES | **GREEN** |
