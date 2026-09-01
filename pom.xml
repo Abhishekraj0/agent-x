@@ -18,6 +18,7 @@
         <module>agentx-mcp</module>
         <module>agentx-spring</module>
         <module>agentx-examples</module>
+        <module>agentx-plugin-example</module>
         <module>agentx-postgres</module>
     </modules>
 
