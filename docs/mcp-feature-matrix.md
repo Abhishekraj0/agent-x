@@ -1,26 +1,35 @@
-# AgentX MCP Feature Matrix & Certification Audit
+# AgentX MCP Feature Matrix & Protocol Certification Audit (Iteration 5.2)
 
-Below is the capabilities, protocol versioning, and verification matrix for Model Context Protocol (MCP) in AgentX (Phase 6 Iteration 5.1 Certified).
-
-| Capability                      | Supported | Tested | E2E | Notes |
-| ------------------------------- | --------- | ------ | --- | ----- |
-| **Active Protocol Version**     | YES       | YES    | YES | Negotiated `2024-11-05` (via `io.modelcontextprotocol.sdk:mcp:2.0.1`) |
-| **Declared Revisions**          | YES       | YES    | YES | `supportedProtocolVersions()` lists `["2024-11-05", "2026-07-28"]` |
-| **Tools Discovery**             | YES       | YES    | YES | Dynamic listing & automatic `ToolRegistry` registration |
-| **Tool Execution**              | YES       | YES    | YES | Map JSON arguments and contents to `ToolResult` |
-| **Tool Schema Conversion**      | YES       | YES    | YES | Converts JSON schema to AgentX `ToolSchema` |
-| **Multi-Server Namespacing**    | YES       | YES    | YES | `serverName.toolName` prevents collisions across servers |
-| **STDIO Transport**             | YES       | YES    | YES | Subprocess stdin/stdout transport pipe |
-| **Custom Transports**           | YES       | YES    | YES | Accepts any SDK `McpClientTransport` (HTTP / SSE) |
-| **Real Process Wire Interop**   | YES       | YES    | YES | Certified against independent JSON-RPC subprocess (`McpRealProtocolInteroperabilityTest`) |
-| **16-Point Failure Matrix**     | YES       | YES    | YES | Tested & certified in `McpFailureMatrixTest` |
-| **Secret Redaction**            | YES       | YES    | YES | High-entropy & pattern secret redaction on tool outputs |
-| **Memory Isolation**            | YES       | YES    | YES | Multi-tenant session state isolation |
-| **SDK Leakage Boundary**        | YES       | YES    | YES | SDK classes hidden behind `agentx-api` and `agentx-mcp` |
+Below is the detailed capabilities, protocol era breakdown, and verification matrix for Model Context Protocol (MCP) in AgentX (Phase 6 Iteration 5.2 Wire-Level Certification).
 
 ---
 
-## Certification Status
-- **MCP Core Adapter Status**: **GREEN**
-- **Protocol Version Alignment**: **GREEN (2024-11-05 active, 2026-07-28 forward-declared)**
-- **Test Suite**: **31 tests passing in agentx-mcp (105 full suite)**
+## 1. Protocol Era Certification Matrix
+
+| Capability | Legacy (2024-11-05) | Modern 2026-07-28 | Tested | Status |
+| ---------- | ------------------- | ----------------- | ------ | ------ |
+| **initialize** | YES | N/A (Forbidden in modern) | YES | **GREEN (Legacy)** |
+| **server/discover** | N/A | UNSUPPORTED (SDK 2.0.1) | YES | **YELLOW (SDK 2.0.1 Limitation)** |
+| **tools/list** | YES | Wire Tested | YES | **GREEN** |
+| **tools/call** | YES | Wire Tested | YES | **GREEN** |
+| **structured output** | YES | Wire Tested | YES | **GREEN** |
+| **Streamable HTTP** | N/A | UNSUPPORTED | NO | **UNSUPPORTED** |
+| **STDIO** | YES | Wire Tested | YES | **GREEN** |
+| **SSE** | N/A | UNSUPPORTED | NO | **UNSUPPORTED** |
+| **session ID** | YES | N/A (Forbidden in modern) | YES | **GREEN (Legacy)** |
+| **stateless requests** | NO | Wire Tested (Raw JSON-RPC) | YES | **YELLOW (SDK 2.0.1 Client hardcodes initialize)** |
+| **cancellation** | YES | Wire Tested | YES | **GREEN** |
+| **authorization** | YES | YES | YES | **GREEN** |
+| **schema** | YES | YES | YES | **GREEN** |
+| **dynamic discovery** | YES | YES | YES | **GREEN** |
+| **error handling** | YES | YES | YES | **GREEN** |
+
+---
+
+## 2. Certification Summary & Final Decision
+* **Certified Active Protocol**: **`2024-11-05` (GREEN)**
+* **Advertised Revision**: `2024-11-05` (`supportedProtocolVersions() = ["2024-11-05"]`)
+* **Modern 2026-07-28 Status**: **YELLOW (SDK 2.0.1 Limitation)**
+  - *Finding*: `io.modelcontextprotocol.sdk:mcp:2.0.1` client adapter hardcodes legacy `initialize` handshake and lacks native `server/discover` API.
+  - *Proof*: Verified via `Mcp2026ModernStdioInteropTest.java` against an independent 2026-07-28 modern subprocess (`Mcp2026ModernServerProcess.java`).
+* **Test Suite**: **35 MCP tests passing (109 full repository total)**
