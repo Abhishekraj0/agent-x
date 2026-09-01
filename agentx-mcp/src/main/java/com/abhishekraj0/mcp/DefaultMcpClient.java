@@ -7,6 +7,8 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.ListToolsResult;
@@ -29,7 +31,9 @@ public class DefaultMcpClient implements McpClient {
     private final String command;
     private final List<String> args;
     private final Map<String, String> env;
+    private final McpClientTransport customTransport;
     private final Function<McpSchema.Tool, ToolMetadata> metadataProvider;
+    private final String activeProtocolVersion;
     private McpSyncClient syncClient;
     private volatile boolean connected = false;
 
@@ -54,7 +58,23 @@ public class DefaultMcpClient implements McpClient {
         this.command = command;
         this.args = args;
         this.env = env;
+        this.customTransport = null;
         this.metadataProvider = metadataProvider;
+        this.activeProtocolVersion = "2024-11-05";
+    }
+
+    public DefaultMcpClient(McpClientTransport customTransport) {
+        this(null, customTransport, null);
+    }
+
+    public DefaultMcpClient(String serverName, McpClientTransport customTransport, Function<McpSchema.Tool, ToolMetadata> metadataProvider) {
+        this.serverName = serverName;
+        this.command = null;
+        this.args = List.of();
+        this.env = Map.of();
+        this.customTransport = customTransport;
+        this.metadataProvider = metadataProvider;
+        this.activeProtocolVersion = "2024-11-05";
     }
 
     public DefaultMcpClient(McpSyncClient syncClient) {
@@ -70,9 +90,11 @@ public class DefaultMcpClient implements McpClient {
         this.command = null;
         this.args = List.of();
         this.env = Map.of();
+        this.customTransport = null;
         this.syncClient = syncClient;
         this.metadataProvider = metadataProvider;
         this.connected = (syncClient != null);
+        this.activeProtocolVersion = "2024-11-05";
     }
 
     public String serverName() {
@@ -80,26 +102,41 @@ public class DefaultMcpClient implements McpClient {
     }
 
     @Override
+    public String protocolVersion() {
+        return activeProtocolVersion;
+    }
+
+    @Override
+    public List<String> supportedProtocolVersions() {
+        return List.of("2024-11-05", "2026-07-28");
+    }
+
+    @Override
     public void connect() {
         if (connected && syncClient != null) {
             return;
         }
-        if (command == null) {
+        if (command == null && customTransport == null) {
             if (syncClient != null) {
                 this.connected = true;
             }
             return;
         }
         try {
-            ServerParameters params = ServerParameters.builder(command)
-                    .args(args)
-                    .env(env)
-                    .build();
+            McpClientTransport transportToUse = customTransport;
+            if (transportToUse == null) {
+                ServerParameters params = ServerParameters.builder(command)
+                        .args(args)
+                        .env(env)
+                        .build();
+                JacksonMcpJsonMapper jsonMapper = new JacksonMcpJsonMapper(new ObjectMapper());
+                transportToUse = new StdioClientTransport(params, jsonMapper);
+            }
 
-            JacksonMcpJsonMapper jsonMapper = new JacksonMcpJsonMapper(new ObjectMapper());
-            StdioClientTransport transport = new StdioClientTransport(params, jsonMapper);
+            JsonSchemaValidator noopValidator = (schema, input) -> new JsonSchemaValidator.ValidationResponse(true, null, null);
 
-            this.syncClient = io.modelcontextprotocol.client.McpClient.sync(transport)
+            this.syncClient = io.modelcontextprotocol.client.McpClient.sync(transportToUse)
+                    .jsonSchemaValidator(noopValidator)
                     .capabilities(ClientCapabilities.builder()
                             .roots(true)
                             .sampling()
@@ -108,7 +145,7 @@ public class DefaultMcpClient implements McpClient {
 
             this.syncClient.initialize();
             this.connected = true;
-            log.info("Successfully connected to MCP Server [{}] running command: {}", serverName != null ? serverName : "default", command);
+            log.info("Successfully connected to MCP Server [{}]", serverName != null ? serverName : "default");
         } catch (Exception e) {
             this.connected = false;
             log.error("Failed to connect to MCP Server [{}]: {}", serverName != null ? serverName : "default", e.getMessage(), e);
@@ -120,13 +157,13 @@ public class DefaultMcpClient implements McpClient {
     public void disconnect() {
         if (syncClient != null) {
             try {
-                if (command != null) {
+                if (command != null || customTransport != null) {
                     syncClient.close();
                 }
             } catch (Exception e) {
                 log.warn("Error closing MCP Sync Client [{}]: {}", serverName != null ? serverName : "default", e.getMessage());
             } finally {
-                if (command != null) {
+                if (command != null || customTransport != null) {
                     syncClient = null;
                 }
                 connected = false;
@@ -138,7 +175,7 @@ public class DefaultMcpClient implements McpClient {
 
     @Override
     public void reconnect() {
-        if (command == null && syncClient != null) {
+        if (command == null && customTransport == null && syncClient != null) {
             this.connected = true;
             return;
         }
@@ -154,7 +191,7 @@ public class DefaultMcpClient implements McpClient {
     @Override
     public List<AgentTool> tools() {
         if (!connected || syncClient == null) {
-            if (command != null) {
+            if (command != null || customTransport != null) {
                 connect();
             } else if (!connected) {
                 return List.of();
