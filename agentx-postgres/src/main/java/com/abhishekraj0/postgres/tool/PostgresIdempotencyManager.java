@@ -42,12 +42,16 @@ public class PostgresIdempotencyManager implements IdempotencyManager {
         if (request == null || request.idempotencyKey() == null) {
             return IdempotencyDecision.executeNew();
         }
-        String sql = "SELECT output, success, error_message FROM agent_tool_execution WHERE idempotency_key = ?";
+        String sql = "SELECT output, success, error_message, status FROM agent_tool_execution WHERE idempotency_key = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, request.idempotencyKey());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
+                    String status = rs.getString("status");
+                    if ("PENDING".equals(status)) {
+                        return IdempotencyDecision.unknownResult("Tool execution outcome is unknown due to prior interruption or unconfirmed completion");
+                    }
                     String output = rs.getString("output");
                     boolean success = rs.getBoolean("success");
                     String errorMessage = rs.getString("error_message");
@@ -58,6 +62,28 @@ public class PostgresIdempotencyManager implements IdempotencyManager {
             throw new RuntimeException("Failed to check idempotency key " + request.idempotencyKey(), e);
         }
         return IdempotencyDecision.executeNew();
+    }
+
+    @Override
+    public void recordPending(ToolExecutionRequest request) {
+        if (request == null || request.idempotencyKey() == null) {
+            return;
+        }
+        String sql = "INSERT INTO agent_tool_execution (" +
+                "  idempotency_key, execution_id, tool_call_id, tool_id, success, output, error_message, completed_at, status" +
+                ") VALUES (?, ?, ?, ?, false, null, 'Tool execution in progress', ?, 'PENDING') " +
+                "ON CONFLICT (idempotency_key) DO NOTHING";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, request.idempotencyKey());
+            ps.setString(2, request.executionId());
+            ps.setString(3, request.toolCallId());
+            ps.setString(4, request.toolId());
+            ps.setTimestamp(5, Timestamp.from(request.startedAt()));
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to record pending idempotency key " + request.idempotencyKey(), e);
+        }
     }
 
     @Override
